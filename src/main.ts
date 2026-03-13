@@ -143,6 +143,81 @@ let clockTime = DAWN_SECONDS;
 let clockDay = 1;
 let coins = 0;
 let hoveredTile: { x: number; z: number } | null = null;
+let mouseDown = false;
+let toolCooldown = 0;
+const TOOL_HOLD_RATE = 0.12; // seconds between actions while holding
+
+// ── Water Splash Particles ────────────────────────────────
+interface Splash {
+  x: number; // pixel position
+  z: number;
+  life: number; // 0→1 (1 = dead)
+  size: number;
+  vx: number;
+  vz: number;
+}
+
+const splashes: Splash[] = [];
+
+function spawnSplash(tileX: number, tileZ: number): void {
+  const cx = tileX * TILE_PX + TILE_PX / 2;
+  const cz = tileZ * TILE_PX + TILE_PX / 2;
+
+  // Main splash droplets — burst outward from center
+  for (let i = 0; i < 8; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 8 + Math.random() * 20;
+    splashes.push({
+      x: cx + (Math.random() - 0.5) * 4,
+      z: cz + (Math.random() - 0.5) * 4,
+      life: 0,
+      size: 1 + Math.random(),
+      vx: Math.cos(angle) * speed,
+      vz: Math.sin(angle) * speed,
+    });
+  }
+
+  // Some smaller droplets that land nearby (the "dries beside" effect)
+  for (let i = 0; i < 5; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 6 + Math.random() * 14;
+    splashes.push({
+      x: cx + Math.cos(angle) * dist,
+      z: cz + Math.sin(angle) * dist,
+      life: 0.2 + Math.random() * 0.15, // start partially faded — they "landed" already
+      size: 1,
+      vx: 0,
+      vz: 0,
+    });
+  }
+}
+
+function updateSplashes(dt: number): void {
+  for (let i = splashes.length - 1; i >= 0; i--) {
+    const s = splashes[i]!;
+    s.life += dt * 1.2;
+    s.x += s.vx * dt;
+    s.z += s.vz * dt;
+    // Friction
+    s.vx *= 0.88;
+    s.vz *= 0.88;
+    if (s.life >= 1) splashes.splice(i, 1);
+  }
+}
+
+function drawSplashes(g: Graphics): void {
+  for (const s of splashes) {
+    const alpha = 1 - s.life;
+    if (alpha <= 0) continue;
+    // Blue water droplet that fades
+    const sz = Math.max(1, Math.round(s.size * (1 - s.life * 0.5)));
+    g.rect(Math.round(s.x), Math.round(s.z), sz, sz).fill({ color: 0x6aaad0, alpha: alpha * 0.7 });
+    // Lighter center for sheen
+    if (sz > 1 && alpha > 0.3) {
+      g.rect(Math.round(s.x), Math.round(s.z), 1, 1).fill({ color: 0xa0d4f0, alpha: alpha * 0.5 });
+    }
+  }
+}
 
 // ── DOM ───────────────────────────────────────────────────
 function el<T extends HTMLElement>(id: string): T {
@@ -318,12 +393,24 @@ function drawCrop(g: Graphics, crop: CropState): void {
   }
 }
 
+let stegoBlinkTimer = 0;
+let stegoBlinking = false;
+
 function drawStego(g: Graphics): void {
   const px = stego.x * TILE_PX;
   const pz = stego.z * TILE_PX;
   const f = stego.facing; // 1 = right, -1 = left
   const bob = stego.state === "walking" ? Math.sin(stego.walkTimer * 6) * 0.4 : 0;
   const legSwing = stego.state === "walking" ? Math.sin(stego.walkTimer * 8) * 1 : 0;
+  const now = performance.now() / 1000;
+  // Tail wag — gentle sine oscillation
+  const tailWag = Math.sin(now * 2.5) * 1.2;
+  // Blink logic
+  stegoBlinkTimer -= 1 / 60;
+  if (stegoBlinkTimer <= 0) {
+    stegoBlinking = !stegoBlinking;
+    stegoBlinkTimer = stegoBlinking ? 0.12 : 2.5 + Math.random() * 3;
+  }
 
   // Center the sprite on the tile position
   const cx = px + 8;
@@ -375,13 +462,16 @@ function drawStego(g: Graphics): void {
     }
   }
 
-  // Tail — extends behind
+  // Tail — extends behind with wag
   const tailX = f === 1 ? cx - 7 : cx + 7;
-  g.rect(tailX, cy + bob, 3, 2).fill(bodyColor);
-  g.rect(tailX + (f === 1 ? -2 : 2), cy + 1 + bob, 2, 1).fill(bodyDark);
+  const tw = Math.round(tailWag);
+  g.rect(tailX, cy + bob + tw, 3, 2).fill(bodyColor);
+  g.rect(tailX + (f === 1 ? -2 : 2), cy + 1 + bob + tw, 2, 1).fill(bodyDark);
+  // Tail tip
+  g.rect(tailX + (f === 1 ? -3 : 3), cy + bob + tw + 1, 2, 1).fill(bodyDark);
   // Tail spikes
-  g.rect(tailX + (f === 1 ? -1 : 2), cy - 1 + bob, 1, 1).fill(plateColor);
-  g.rect(tailX + (f === 1 ? -2 : 3), cy + bob, 1, 1).fill(plateColor);
+  g.rect(tailX + (f === 1 ? -1 : 2), cy - 1 + bob + tw, 1, 1).fill(plateColor);
+  g.rect(tailX + (f === 1 ? -2 : 3), cy + bob + tw, 1, 1).fill(plateColor);
 
   // Head — small, extends forward
   const headX = f === 1 ? cx + 6 : cx - 8;
@@ -390,9 +480,14 @@ function drawStego(g: Graphics): void {
   // Snout
   g.rect(headX + (f === 1 ? 3 : -1), cy + bob, 1, 2).fill(bodyDark);
 
-  // Eye
+  // Eye (blinks)
   const eyeX = headX + (f === 1 ? 2 : 0);
-  g.rect(eyeX, cy - 1 + bob, 1, 1).fill(0x2a2a2a);
+  if (!stegoBlinking) {
+    g.rect(eyeX, cy - 1 + bob, 1, 1).fill(0x2a2a2a);
+  } else {
+    // Closed eye — horizontal line
+    g.rect(eyeX, cy - 1 + bob, 1, 1).fill(bodyDark);
+  }
 
   // Belly highlight
   g.rect(cx - 4, cy + 2 + bob, 8, 1).fill({ color: 0x8edc5e, alpha: 0.5 });
@@ -449,6 +544,7 @@ function renderWorld(): void {
   }
 
   for (const crop of crops) drawCrop(objectGfx, crop);
+  drawSplashes(objectGfx);
   drawStego(objectGfx);
 
   if (hoveredTile && hoveredTile.x >= 0 && hoveredTile.x < ISLAND_SIZE && hoveredTile.z >= 0 && hoveredTile.z < ISLAND_SIZE) {
@@ -528,6 +624,8 @@ function useTool(): void {
       break;
 
     case "water":
+      // Always splash when watering on any tile
+      spawnSplash(x, z);
       if (tile === "farmland") {
         const crop = crops.find((c) => c.x === x && c.z === z);
         if (crop && !crop.watered) crop.watered = true;
@@ -672,8 +770,18 @@ function setupInput(): void {
 
   window.addEventListener("mousedown", (e) => {
     if (gameMode !== "playing") return;
-    if (e.button === 0) useTool();
+    if (e.button === 0) {
+      mouseDown = true;
+      toolCooldown = 0;
+      useTool();
+    }
   });
+
+  window.addEventListener("mouseup", (e) => {
+    if (e.button === 0) mouseDown = false;
+  });
+
+  window.addEventListener("mouseleave", () => { mouseDown = false; });
 
   window.addEventListener("contextmenu", (e) => e.preventDefault());
 
@@ -695,6 +803,17 @@ function gameLoop(ticker: Ticker): void {
   if (gameMode === "playing") {
     updateClock(dt);
     updateStego(dt);
+    updateSplashes(dt);
+
+    // Hold-down continuous tool use
+    if (mouseDown) {
+      toolCooldown -= dt;
+      if (toolCooldown <= 0) {
+        toolCooldown = TOOL_HOLD_RATE;
+        useTool();
+      }
+    }
+
     saveTimer += dt;
     if (saveTimer >= 30) { saveTimer = 0; saveGame(); }
     updateHud();
