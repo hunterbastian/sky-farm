@@ -232,6 +232,101 @@ const hudTime = el<HTMLSpanElement>("hud-time");
 const hudCoins = el<HTMLSpanElement>("hud-coins");
 const toolbarEl = el<HTMLDivElement>("toolbar");
 const startBtn = el<HTMLButtonElement>("start-btn");
+const gameContainer = el<HTMLDivElement>("game-container");
+
+// ── Pixel Art Cursors ─────────────────────────────────────
+function makePixelCursor(draw: (ctx: CanvasRenderingContext2D) => void, hotX = 0, hotY = 0): string {
+  const size = 32;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+  draw(ctx);
+  return `url(${c.toDataURL()}) ${hotX} ${hotY}, auto`;
+}
+
+function px(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string): void {
+  ctx.fillStyle = color;
+  ctx.fillRect(x * 2, y * 2, w * 2, h * 2);
+}
+
+const cursorHoe = makePixelCursor((ctx) => {
+  // Handle
+  px(ctx, 2, 3, 1, 10, "#8b6840");
+  px(ctx, 3, 3, 1, 10, "#7a5e36");
+  // Head
+  px(ctx, 0, 1, 6, 2, "#a0a0a0");
+  px(ctx, 0, 0, 6, 1, "#c0c0c0");
+  px(ctx, 1, 1, 4, 1, "#888888");
+  // Outline
+  px(ctx, 0, 3, 1, 1, "#5a4020");
+}, 4, 2);
+
+const cursorWater = makePixelCursor((ctx) => {
+  // Bucket body
+  px(ctx, 2, 4, 8, 7, "#6a8aaa");
+  px(ctx, 3, 4, 6, 7, "#5a7a9a");
+  px(ctx, 2, 4, 8, 1, "#8aaace");
+  px(ctx, 2, 10, 8, 1, "#4a6a8a");
+  // Rim
+  px(ctx, 1, 3, 10, 1, "#8aaace");
+  px(ctx, 1, 3, 1, 1, "#a0b8d0");
+  // Handle
+  px(ctx, 4, 1, 4, 1, "#888888");
+  px(ctx, 3, 2, 1, 1, "#888888");
+  px(ctx, 8, 2, 1, 1, "#888888");
+  // Water inside
+  px(ctx, 3, 5, 6, 3, "#4a8fb8");
+  px(ctx, 4, 5, 4, 1, "#6aaad0");
+  // Drip
+  px(ctx, 1, 11, 1, 2, "#6aaad0");
+  px(ctx, 1, 13, 1, 1, "#4a8fb8");
+}, 6, 14);
+
+const cursorSeeds = makePixelCursor((ctx) => {
+  // Bag body
+  px(ctx, 3, 4, 7, 8, "#c4a870");
+  px(ctx, 4, 4, 5, 8, "#b09458");
+  px(ctx, 3, 4, 7, 1, "#d4b880");
+  px(ctx, 3, 11, 7, 1, "#9a8048");
+  // Bag top (gathered)
+  px(ctx, 4, 2, 5, 2, "#c4a870");
+  px(ctx, 5, 1, 3, 1, "#c4a870");
+  // Tie
+  px(ctx, 5, 3, 3, 1, "#6a5030");
+  // Seeds visible on bag
+  px(ctx, 5, 6, 1, 1, "#5daa3e");
+  px(ctx, 7, 7, 1, 1, "#4e9636");
+  px(ctx, 6, 8, 1, 1, "#6ebc4e");
+  px(ctx, 8, 6, 1, 1, "#5daa3e");
+  // Falling seed
+  px(ctx, 4, 13, 1, 1, "#5daa3e");
+  px(ctx, 6, 14, 1, 1, "#4e9636");
+}, 6, 14);
+
+const toolCursors: Record<ToolId, string> = {
+  hoe: cursorHoe,
+  water: cursorWater,
+  seeds: cursorSeeds,
+};
+
+let activeCursorTool: ToolId | null = null;
+
+function updateCursor(): void {
+  if (gameMode !== "playing") {
+    if (activeCursorTool !== null) {
+      gameContainer.style.cursor = "";
+      activeCursorTool = null;
+    }
+    return;
+  }
+  const tool = TOOLS[selectedTool]!.id;
+  if (tool !== activeCursorTool) {
+    gameContainer.style.cursor = toolCursors[tool];
+    activeCursorTool = tool;
+  }
+}
 
 // ── PixiJS Setup ──────────────────────────────────────────
 const app = new Application();
@@ -267,21 +362,49 @@ function drawGrassTile(g: Graphics, tx: number, tz: number): void {
   const base = baseColors[Math.floor(rand() * baseColors.length)]!;
   g.rect(tx * TILE_PX, tz * TILE_PX, TILE_PX, TILE_PX).fill(base);
 
-  for (let i = 0; i < 6; i++) {
-    const px = Math.floor(rand() * 14) + 1;
-    const pz = Math.floor(rand() * 14) + 1;
-    const shade = rand() > 0.5 ? COLORS.grassLight : COLORS.grassDark;
-    g.rect(tx * TILE_PX + px, tz * TILE_PX + pz, 1, 1).fill(shade);
+  // Edge dirt — bare patches near island perimeter
+  const edgeDist = Math.min(tx, tz, ISLAND_SIZE - 1 - tx, ISLAND_SIZE - 1 - tz);
+  if (edgeDist <= 1) {
+    const dirtChance = edgeDist === 0 ? 0.7 : 0.3;
+    const dirtCount = edgeDist === 0 ? 4 + Math.floor(rand() * 4) : 2 + Math.floor(rand() * 3);
+    if (rand() < dirtChance) {
+      const dirtColors = [0x7a6a4e, 0x6e5e42, 0x8a7a5a, 0x5e5038];
+      for (let i = 0; i < dirtCount; i++) {
+        const dx = Math.floor(rand() * 14) + 1;
+        const dz = Math.floor(rand() * 14) + 1;
+        const dc = dirtColors[Math.floor(rand() * dirtColors.length)]!;
+        const dw = 1 + Math.floor(rand() * 2);
+        const dh = 1 + Math.floor(rand() * 2);
+        g.rect(tx * TILE_PX + dx, tz * TILE_PX + dz, dw, dh).fill(dc);
+      }
+    }
+    // Sparse pebbles on edges
+    if (edgeDist === 0 && rand() < 0.4) {
+      const px2 = Math.floor(rand() * 12) + 2;
+      const pz2 = Math.floor(rand() * 12) + 2;
+      g.rect(tx * TILE_PX + px2, tz * TILE_PX + pz2, 2, 1).fill(0x9a9080);
+      g.rect(tx * TILE_PX + px2 + 4, tz * TILE_PX + pz2 + 3, 1, 1).fill(0x8a8070);
+    }
   }
 
-  if (rand() < 0.4) {
+  // Grass speckles
+  for (let i = 0; i < 6; i++) {
+    const spx = Math.floor(rand() * 14) + 1;
+    const spz = Math.floor(rand() * 14) + 1;
+    const shade = rand() > 0.5 ? COLORS.grassLight : COLORS.grassDark;
+    g.rect(tx * TILE_PX + spx, tz * TILE_PX + spz, 1, 1).fill(shade);
+  }
+
+  // Grass blade tufts (skip on very edge tiles — too dirty)
+  if (edgeDist > 0 && rand() < 0.4) {
     const bx = Math.floor(rand() * 10) + 3;
     const bz = Math.floor(rand() * 8) + 4;
     g.rect(tx * TILE_PX + bx, tz * TILE_PX + bz, 1, 3).fill(COLORS.grassDark);
     g.rect(tx * TILE_PX + bx + 2, tz * TILE_PX + bz + 1, 1, 2).fill(COLORS.grassDark);
   }
 
-  if (rand() < 0.18) {
+  // Flowers (only interior tiles)
+  if (edgeDist > 1 && rand() < 0.18) {
     const fx = Math.floor(rand() * 10) + 3;
     const fz = Math.floor(rand() * 10) + 3;
     const flowerColors = [0xf0e040, 0xe86080, 0x80b0f0, 0xf0a0d0, 0xffa060, 0xf8f8f0];
@@ -819,6 +942,7 @@ function gameLoop(ticker: Ticker): void {
     updateHud();
   }
   hoveredTile = getHoveredTile();
+  updateCursor();
   renderWorld();
   updateDayNight();
   updateCamera();
