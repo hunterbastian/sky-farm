@@ -1,5 +1,153 @@
 import { Application, Container, Graphics, Ticker } from "pixi.js";
 
+// ══════════════════════════════════════════════════════════
+// ── ENGINE SYSTEMS ───────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+
+// ── Sound Engine (procedural Web Audio) ──────────────────
+let audioCtx: AudioContext | null = null;
+
+function ensureAudio(): AudioContext {
+  if (!audioCtx) audioCtx = new AudioContext();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+function playTone(freq: number, duration: number, type: OscillatorType = "square", volume = 0.08): void {
+  const ctx = ensureAudio();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(volume, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + duration);
+}
+
+function playNoise(duration: number, volume = 0.03): void {
+  const ctx = ensureAudio();
+  const bufSize = ctx.sampleRate * duration;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(volume, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  src.connect(gain).connect(ctx.destination);
+  src.start();
+}
+
+// Named sound effects
+function sfxTill(): void { playTone(180, 0.08, "square", 0.06); setTimeout(() => playNoise(0.06, 0.04), 40); }
+function sfxPlant(): void { playTone(440, 0.06, "sine", 0.05); playTone(550, 0.08, "sine", 0.04); }
+function sfxWater(): void { playNoise(0.12, 0.05); playTone(800, 0.05, "sine", 0.02); }
+function sfxChop(): void { playTone(120, 0.06, "square", 0.08); setTimeout(() => playNoise(0.08, 0.06), 30); }
+function sfxTreeFall(): void { playTone(80, 0.2, "sawtooth", 0.06); setTimeout(() => playNoise(0.15, 0.05), 100); }
+function sfxHarvest(): void {
+  playTone(523, 0.08, "square", 0.05);
+  setTimeout(() => playTone(659, 0.08, "square", 0.05), 80);
+  setTimeout(() => playTone(784, 0.1, "square", 0.04), 160);
+}
+function sfxCoin(): void { playTone(880, 0.06, "square", 0.04); setTimeout(() => playTone(1320, 0.1, "square", 0.03), 60); }
+function sfxEgg(): void { playTone(600, 0.05, "sine", 0.04); setTimeout(() => playTone(800, 0.06, "sine", 0.03), 50); }
+function sfxSelect(): void { playTone(660, 0.04, "square", 0.03); }
+function sfxError(): void { playTone(200, 0.1, "square", 0.04); }
+
+// ── Floating Text Popups ─────────────────────────────────
+interface FloatingText {
+  text: string;
+  x: number; z: number; // world pixel coords
+  life: number; // 0→1
+  color: number;
+}
+
+const floatingTexts: FloatingText[] = [];
+
+function spawnFloatingText(tileX: number, tileZ: number, text: string, color = 0xf0e060): void {
+  floatingTexts.push({
+    text,
+    x: tileX * TILE_PX + TILE_PX / 2,
+    z: tileZ * TILE_PX,
+    life: 0,
+    color,
+  });
+}
+
+function updateFloatingTexts(dt: number): void {
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i]!;
+    ft.life += dt * 0.8;
+    ft.z -= dt * 20;
+    if (ft.life >= 1) floatingTexts.splice(i, 1);
+  }
+}
+
+function drawFloatingTexts(g: Graphics): void {
+  for (const ft of floatingTexts) {
+    const alpha = 1 - ft.life;
+    // Draw each character as tiny pixel blocks (3x5 font)
+    drawPixelString(g, ft.text, Math.round(ft.x), Math.round(ft.z), ft.color, alpha);
+  }
+}
+
+// Tiny 3x5 pixel font for floating text
+const PIXEL_FONT: Record<string, number[]> = {
+  "0": [0xe,0x11,0x11,0x11,0xe], "1": [0x4,0xc,0x4,0x4,0xe],
+  "2": [0xe,0x1,0xe,0x10,0x1f], "3": [0x1e,0x1,0xe,0x1,0x1e],
+  "4": [0x11,0x11,0x1f,0x1,0x1], "5": [0x1f,0x10,0x1e,0x1,0x1e],
+  "6": [0xe,0x10,0x1e,0x11,0xe], "7": [0x1f,0x1,0x2,0x4,0x4],
+  "8": [0xe,0x11,0xe,0x11,0xe], "9": [0xe,0x11,0xf,0x1,0xe],
+  "+": [0x0,0x4,0xe,0x4,0x0], "-": [0x0,0x0,0xe,0x0,0x0],
+  " ": [0x0,0x0,0x0,0x0,0x0],
+};
+
+function drawPixelString(g: Graphics, str: string, x: number, z: number, color: number, alpha: number): void {
+  let cx = x - (str.length * 4) / 2; // center
+  for (const ch of str) {
+    const glyph = PIXEL_FONT[ch];
+    if (glyph) {
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 5; col++) {
+          if (glyph[row]! & (1 << (4 - col))) {
+            g.rect(cx + col, z + row, 1, 1).fill({ color, alpha });
+          }
+        }
+      }
+    }
+    cx += 4;
+  }
+}
+
+// ── Screen Shake ─────────────────────────────────────────
+let shakeIntensity = 0;
+let shakeDecay = 0.9;
+let shakeOffX = 0;
+let shakeOffY = 0;
+
+function triggerShake(intensity = 3): void {
+  shakeIntensity = intensity;
+}
+
+function updateShake(): void {
+  if (shakeIntensity > 0.1) {
+    shakeOffX = (Math.random() - 0.5) * shakeIntensity * 2;
+    shakeOffY = (Math.random() - 0.5) * shakeIntensity * 2;
+    shakeIntensity *= shakeDecay;
+  } else {
+    shakeOffX = 0;
+    shakeOffY = 0;
+    shakeIntensity = 0;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// ── GAME ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+
 // ── Types ─────────────────────────────────────────────────
 type TileType = "grass" | "farmland";
 type CropTypeId = "sky_wheat" | "star_berry" | "cloud_pumpkin" | "moon_flower";
@@ -1714,6 +1862,7 @@ function renderWorld(): void {
   for (const c of chickens) drawChicken(objectGfx, c);
   drawButterflies(objectGfx);
   drawMotes(objectGfx);
+  drawFloatingTexts(objectGfx);
 
   if (hoveredTile && hoveredTile.x >= 0 && hoveredTile.x < ISLAND_SIZE && hoveredTile.z >= 0 && hoveredTile.z < ISLAND_SIZE) {
     drawHighlight(uiGfx, hoveredTile.x, hoveredTile.z);
@@ -1726,8 +1875,8 @@ function updateCamera(): void {
   // Center camera on island middle
   const centerX = (ISLAND_SIZE / 2) * TILE_PX;
   const centerZ = (ISLAND_SIZE / 2) * TILE_PX;
-  world.x = screenW / 2 - centerX * RENDER_SCALE;
-  world.y = screenH / 2 - centerZ * RENDER_SCALE;
+  world.x = screenW / 2 - centerX * RENDER_SCALE + shakeOffX;
+  world.y = screenH / 2 - centerZ * RENDER_SCALE + shakeOffY;
   world.scale.set(RENDER_SCALE);
 }
 
@@ -1770,36 +1919,39 @@ function useTool(): void {
   const tile = tiles[z]?.[x];
   if (!tile) return;
   // Collect eggs with any tool
-  if (collectEgg(x, z)) { updateHud(); return; }
+  if (collectEgg(x, z)) { sfxEgg(); sfxCoin(); spawnFloatingText(x, z, "+3", 0xf0e060); updateHud(); return; }
 
   // Can't interact with pond or pen tiles
-  if (isPondTile(x, z) || isPenTile(x, z)) return;
+  if (isPondTile(x, z) || isPenTile(x, z)) { sfxError(); return; }
 
   const tool = TOOLS[selectedTool]!.id;
 
   switch (tool) {
     case "hoe":
       if (tile === "grass") {
-        // Till grass into farmland
         tiles[z]![x] = "farmland";
+        sfxTill();
       } else if (tile === "farmland") {
-        // Harvest crop if ready, otherwise revert to grass
         const cropIdx = crops.findIndex((c) => c.x === x && c.z === z);
         if (cropIdx >= 0) {
           const crop = crops[cropIdx]!;
           if (crop.growth >= CROP_DEFS[crop.type].growDays) {
-            coins += CROP_DEFS[crop.type].sellPrice;
+            const price = CROP_DEFS[crop.type].sellPrice;
+            coins += price;
             crops.splice(cropIdx, 1);
+            sfxHarvest();
+            spawnFloatingText(x, z, "+" + price, 0xf0e060);
           }
         } else {
           tiles[z]![x] = "grass";
+          sfxTill();
         }
       }
       break;
 
     case "water":
-      // Always splash when watering on any tile
       spawnSplash(x, z);
+      sfxWater();
       if (tile === "farmland") {
         const crop = crops.find((c) => c.x === x && c.z === z);
         if (crop && !crop.watered) crop.watered = true;
@@ -1810,6 +1962,7 @@ function useTool(): void {
       if (tile === "farmland") {
         if (!crops.some((c) => c.x === x && c.z === z)) {
           crops.push({ x, z, type: CROP_IDS[selectedSeed]!, growth: 0, watered: false });
+          sfxPlant();
         }
       }
       break;
@@ -1818,9 +1971,14 @@ function useTool(): void {
       const tree = trees.find((t) => t.x === x && t.z === z && t.chopTime < CHOP_HITS);
       if (tree) {
         tree.chopTime += 1;
+        sfxChop();
+        triggerShake(2);
         if (tree.chopTime >= CHOP_HITS) {
           wood += 3;
           tree.regrowTimer = TREE_REGROW_SECONDS;
+          sfxTreeFall();
+          triggerShake(5);
+          spawnFloatingText(x, z, "+3", 0xc4a050);
         }
       }
       break;
@@ -1915,19 +2073,19 @@ function updateHud(): void {
     const idx = i;
     div.addEventListener("click", () => {
       if (idx === selectedTool && tool.id === "seeds") {
-        // Clicking seeds again cycles seed type
         selectedSeed = (selectedSeed + 1) % CROP_IDS.length;
       }
       selectedTool = idx;
+      sfxSelect();
       updateHud();
     });
-    // Right-click on seeds slot cycles seed type
     if (tool.id === "seeds") {
       div.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
         selectedSeed = (selectedSeed + 1) % CROP_IDS.length;
         selectedTool = idx;
+        sfxSelect();
         updateHud();
       });
     }
@@ -2079,6 +2237,7 @@ function setupInput(): void {
     const digit = parseInt(e.key, 10);
     if (digit >= 1 && digit <= TOOL_COUNT) {
       selectedTool = digit - 1;
+      sfxSelect();
       updateHud();
     }
   });
@@ -2087,6 +2246,7 @@ function setupInput(): void {
     if (gameMode !== "playing") return;
     const dir = e.deltaY > 0 ? 1 : -1;
     selectedTool = ((selectedTool + dir) % TOOL_COUNT + TOOL_COUNT) % TOOL_COUNT;
+    sfxSelect();
     updateHud();
   });
 
@@ -2138,6 +2298,8 @@ function gameLoop(ticker: Ticker): void {
     updateMapleLeaves(dt);
     updateEggs(dt);
     updateCloudShadows(dt);
+    updateFloatingTexts(dt);
+    updateShake();
 
     // Hold-down continuous tool use
     if (mouseDown) {
