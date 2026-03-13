@@ -1037,8 +1037,111 @@ const hudCoins = el<HTMLSpanElement>("hud-coins");
 const toolbarEl = el<HTMLDivElement>("toolbar");
 const startBtn = el<HTMLButtonElement>("start-btn");
 const resetBtn = el<HTMLButtonElement>("reset-btn");
+const changelogBtn = el<HTMLButtonElement>("changelog-btn");
+const changelogPanel = el<HTMLDivElement>("changelog-panel");
+const changelogEntries = el<HTMLDivElement>("changelog-entries");
+const changelogClose = el<HTMLButtonElement>("changelog-close");
 const dayClock = el<HTMLDivElement>("day-clock");
 const gameContainer = el<HTMLDivElement>("game-container");
+
+// ── Changelog ─────────────────────────────────────────────
+const CHANGELOG = [
+  {
+    version: "v0.5 — The Sky Update",
+    date: "Mar 13, 2026",
+    changes: [
+      "Island now floats in a real sky with gradient + drifting clouds",
+      "Sky transitions with day/night cycle (blue, sunset, night)",
+      "Tapered rocky underside beneath the island",
+      "Grand LOTR-style oak trees with thick trunks and exposed roots",
+      "Cherry blossom trees with pink canopy and falling petals",
+      "Falling tree animation when chopping",
+      "Little woodchopper character with axe swing",
+      "Pointer tool for collecting eggs and harvesting",
+      "5-slot toolbar: pointer, hoe, water, seeds, axe",
+      "This journal!",
+    ],
+  },
+  {
+    version: "v0.4 — Game Engine",
+    date: "Mar 13, 2026",
+    changes: [
+      "Procedural sound effects (Web Audio) for all actions",
+      "Floating +coin text popups with tiny pixel font",
+      "Screen shake on chop and tree fall",
+      "Error sound when clicking pond or pen tiles",
+    ],
+  },
+  {
+    version: "v0.3 — Retro Aesthetic",
+    date: "Mar 13, 2026",
+    changes: [
+      "CRT scanlines, dithering, and barrel curvature",
+      "Press Start 2P pixel font throughout",
+      "Boot-up terminal sequence before title",
+      "Clickable toolbar slots (no more keyboard-only)",
+    ],
+  },
+  {
+    version: "v0.2 — Farm Life",
+    date: "Mar 13, 2026",
+    changes: [
+      "4 crop types: sky wheat, star berry, cloud pumpkin, moon flower",
+      "Chicken pen with fencing, straw, trough, hay bale",
+      "Chickens lay eggs — click to collect for coins",
+      "Pond with animated water, ripples, lily pads",
+      "Cloud shadows drifting across the island",
+      "30 wildflowers scattered on grass",
+      "Japanese maple trees with falling leaves",
+      "Day/night cycle with 17 lighting moods",
+    ],
+  },
+  {
+    version: "v0.1 — First Harvest",
+    date: "Mar 12, 2026",
+    changes: [
+      "Floating grass island with 24x24 tile grid",
+      "Hoe, water, seeds, axe tools",
+      "3 oak trees (choppable, regrow after 60s)",
+      "Beehive with orbiting bees",
+      "4 yellow chickens with idle animations",
+      "Butterflies and pollen motes",
+      "Save/load via localStorage",
+    ],
+  },
+];
+
+function buildChangelog(): void {
+  changelogEntries.textContent = "";
+  for (const entry of CHANGELOG) {
+    const div = document.createElement("div");
+    div.className = "changelog-version";
+    const h2 = document.createElement("h2");
+    h2.textContent = entry.version;
+    div.appendChild(h2);
+    const date = document.createElement("div");
+    date.className = "changelog-date";
+    date.textContent = entry.date;
+    div.appendChild(date);
+    const ul = document.createElement("ul");
+    for (const change of entry.changes) {
+      const li = document.createElement("li");
+      li.textContent = change;
+      ul.appendChild(li);
+    }
+    div.appendChild(ul);
+    changelogEntries.appendChild(div);
+  }
+}
+
+changelogBtn.addEventListener("click", () => {
+  buildChangelog();
+  changelogPanel.classList.remove("hidden");
+});
+
+changelogClose.addEventListener("click", () => {
+  changelogPanel.classList.add("hidden");
+});
 
 // ── Build toolbar slots once (click handlers persist) ─────
 interface ToolbarSlot { div: HTMLDivElement; icon: HTMLDivElement; name: HTMLDivElement; }

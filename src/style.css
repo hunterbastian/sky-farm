@@ -201,6 +201,72 @@ button:hover {
   opacity: 0.9;
 }
 
+#changelog-btn {
+  position: absolute;
+  bottom: 16px;
+  right: 100px;
+  pointer-events: auto;
+  font-size: 6px;
+  padding: 6px 12px;
+  opacity: 0.5;
+  background: linear-gradient(180deg, rgba(60, 50, 30, 0.7), rgba(40, 30, 15, 0.85));
+  border: 1px solid rgba(20, 20, 20, 0.9);
+  outline: 1px solid rgba(200, 200, 200, 0.15);
+  transition: opacity 0.2s ease;
+}
+
+#changelog-btn:hover {
+  opacity: 0.9;
+}
+
+#changelog-panel {
+  max-height: 70vh;
+  overflow-y: auto;
+  width: min(440px, 90vw);
+  pointer-events: auto;
+  z-index: 100;
+}
+
+#changelog-entries {
+  text-align: left;
+  margin: 12px 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.changelog-version {
+  margin-bottom: 14px;
+}
+
+.changelog-version h2 {
+  font-size: 9px;
+  margin: 0 0 4px;
+  color: var(--accent);
+}
+
+.changelog-version .changelog-date {
+  font-size: 6px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.changelog-version ul {
+  margin: 0;
+  padding-left: 12px;
+  list-style: none;
+}
+
+.changelog-version li {
+  font-size: 7px;
+  line-height: 1.8;
+  color: var(--ink);
+}
+
+.changelog-version li::before {
+  content: "· ";
+  color: var(--muted);
+}
+
 /* ── CRT Effect ──────────────────────────────── */
 #crt-overlay {
   position: fixed;
