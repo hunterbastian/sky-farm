@@ -5,7 +5,6 @@
   --panel: rgba(22, 28, 42, 0.86);
   --panel-strong: rgba(14, 18, 28, 0.94);
   --accent: #a4d47a;
-  --accent-2: #d6b084;
 }
 
 * {
@@ -51,26 +50,32 @@ body {
   letter-spacing: 0.02em;
 }
 
-#hotbar {
+#toolbar {
   position: absolute;
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .hotbar-slot {
-  width: 52px;
-  min-height: 52px;
+  width: 60px;
+  min-height: 60px;
   padding: 4px;
   border: 2px solid rgba(20, 20, 20, 0.9);
   outline: 1px solid rgba(210, 210, 210, 0.24);
   background: linear-gradient(180deg, rgba(44, 53, 72, 0.82), rgba(24, 31, 45, 0.86));
   text-align: center;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.2;
   color: var(--ink);
+  transition: transform 0.1s ease, outline-color 0.15s ease;
+}
+
+.hotbar-slot:hover {
+  transform: translateY(-2px);
+  outline-color: rgba(224, 234, 255, 0.5);
 }
 
 .hotbar-slot.active {
@@ -78,33 +83,26 @@ body {
   outline-color: rgba(191, 255, 176, 0.95);
   background: linear-gradient(180deg, rgba(108, 138, 102, 0.92), rgba(67, 90, 62, 0.95));
   box-shadow: 0 0 0 2px rgba(10, 10, 10, 0.5);
+  transform: translateY(-2px);
 }
 
 .slot-key {
-  opacity: 0.9;
+  opacity: 0.7;
   font-size: 8px;
 }
 
 .slot-name {
-  min-height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-wrap: balance;
-}
-
-.slot-count {
-  opacity: 0.9;
-  font-size: 8px;
+  font-size: 9px;
+  padding-top: 2px;
 }
 
 #status-line {
   position: absolute;
-  bottom: 80px;
+  bottom: 88px;
   width: 100%;
   text-align: center;
   font-size: 11px;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .panel {
@@ -112,20 +110,17 @@ body {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(560px, 92vw);
-  padding: 16px;
+  width: min(400px, 90vw);
+  padding: 20px;
   background: linear-gradient(180deg, var(--panel), var(--panel-strong));
   border: 3px solid rgba(6, 8, 12, 0.95);
   outline: 2px solid rgba(199, 214, 255, 0.24);
   color: var(--ink);
   box-shadow: 0 30px 82px rgba(2, 4, 10, 0.58);
+  text-align: center;
 }
 
-.panel.wide {
-  width: min(920px, 96vw);
-}
-
-.panel h1, .panel h2, .panel h3 {
+.panel h1 {
   margin: 0 0 8px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -136,107 +131,6 @@ body {
   line-height: 1.35;
 }
 
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.tab-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.tab-btn {
-  min-width: 110px;
-}
-
-.tab-btn.active {
-  filter: brightness(1.1);
-  outline-color: rgba(191, 255, 176, 0.95);
-}
-
-.tab-content {
-  position: relative;
-}
-
-.inventory-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(180px, 1fr);
-  gap: 14px;
-  align-items: start;
-}
-
-.slot-grid {
-  display: grid;
-  grid-template-columns: repeat(9, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.hotbar-grid {
-  grid-template-columns: repeat(9, minmax(0, 1fr));
-}
-
-.inventory-slot {
-  min-height: 60px;
-  border: 2px solid rgba(20, 20, 20, 0.9);
-  outline: 1px solid rgba(210, 210, 210, 0.24);
-  background: linear-gradient(180deg, rgba(35, 42, 56, 0.8), rgba(22, 27, 38, 0.82));
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
-  padding: 4px;
-  text-align: center;
-}
-
-.inventory-slot:hover {
-  outline-color: rgba(224, 234, 255, 0.6);
-}
-
-.inventory-slot.active {
-  outline-color: rgba(191, 255, 176, 0.95);
-  background: linear-gradient(180deg, rgba(85, 115, 82, 0.9), rgba(52, 75, 51, 0.95));
-}
-
-.drag-stack {
-  min-height: 48px;
-  border: 2px solid rgba(20, 20, 20, 0.95);
-  outline: 1px solid rgba(210, 210, 210, 0.24);
-  background: rgba(20, 28, 40, 0.76);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px;
-  margin-bottom: 8px;
-}
-
-.craft-list, .shop-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 8px;
-}
-
-.craft-card {
-  border: 2px solid rgba(20, 20, 20, 0.9);
-  outline: 1px solid rgba(210, 210, 210, 0.24);
-  background: rgba(20, 28, 40, 0.76);
-  padding: 8px;
-}
-
-.inventory-tooltip {
-  position: absolute;
-  pointer-events: none;
-  z-index: 40;
-  padding: 6px 8px;
-  background: rgba(8, 10, 14, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  font-size: 11px;
-  max-width: 220px;
-}
-
 .hint {
   color: var(--muted);
   font-size: 12px;
@@ -245,8 +139,8 @@ body {
 button {
   border: 2px solid rgba(18, 22, 30, 1);
   outline: 1px solid rgba(255, 255, 255, 0.24);
-  padding: 8px 10px;
-  font-size: 12px;
+  padding: 10px 20px;
+  font-size: 13px;
   font-family: inherit;
   color: var(--ink);
   background: linear-gradient(180deg, rgba(106, 136, 90, 0.78), rgba(66, 92, 58, 0.9));
