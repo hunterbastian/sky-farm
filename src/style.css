@@ -17,20 +17,10 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: "Courier New", "Lucida Console", monospace;
+  font-family: "Press Start 2P", monospace;
   background: #0a1628;
 }
 
-#game-container {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-#game-container canvas {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-}
 
 #hud {
   position: fixed;
@@ -46,7 +36,7 @@ body {
   left: 12px;
   display: flex;
   gap: 14px;
-  font-size: 14px;
+  font-size: 8px;
   letter-spacing: 0.02em;
 }
 
@@ -67,8 +57,8 @@ body {
   outline: 1px solid rgba(210, 210, 210, 0.24);
   background: linear-gradient(180deg, rgba(44, 53, 72, 0.82), rgba(24, 31, 45, 0.86));
   text-align: center;
-  font-size: 10px;
-  line-height: 1.2;
+  font-size: 7px;
+  line-height: 1.4;
   color: var(--ink);
   transition: transform 0.1s ease, outline-color 0.15s ease;
 }
@@ -88,11 +78,11 @@ body {
 
 .slot-key {
   opacity: 0.7;
-  font-size: 8px;
+  font-size: 6px;
 }
 
 .slot-name {
-  font-size: 9px;
+  font-size: 6px;
   padding-top: 2px;
 }
 
@@ -104,7 +94,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: 7px;
   letter-spacing: 0.04em;
   opacity: 0.85;
 }
@@ -138,7 +128,7 @@ body {
   bottom: 120px;
   width: 100%;
   text-align: center;
-  font-size: 11px;
+  font-size: 7px;
   opacity: 0.6;
 }
 
@@ -158,26 +148,28 @@ body {
 }
 
 .panel h1 {
-  margin: 0 0 8px;
+  margin: 0 0 12px;
   font-weight: 700;
+  font-size: 16px;
   letter-spacing: 0.02em;
 }
 
 .panel p {
   margin: 0 0 10px;
-  line-height: 1.35;
+  font-size: 8px;
+  line-height: 1.6;
 }
 
 .hint {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 7px;
 }
 
 button {
   border: 2px solid rgba(18, 22, 30, 1);
   outline: 1px solid rgba(255, 255, 255, 0.24);
   padding: 10px 20px;
-  font-size: 13px;
+  font-size: 8px;
   font-family: inherit;
   color: var(--ink);
   background: linear-gradient(180deg, rgba(106, 136, 90, 0.78), rgba(66, 92, 58, 0.9));
@@ -195,7 +187,7 @@ button:hover {
   bottom: 16px;
   right: 16px;
   pointer-events: auto;
-  font-size: 10px;
+  font-size: 6px;
   padding: 6px 12px;
   opacity: 0.5;
   background: linear-gradient(180deg, rgba(80, 40, 40, 0.7), rgba(50, 25, 25, 0.85));
@@ -206,6 +198,87 @@ button:hover {
 
 #reset-btn:hover {
   opacity: 0.9;
+}
+
+/* ── CRT Effect ──────────────────────────────── */
+#crt-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  /* Very light scanlines + subtle dither checkerboard */
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 2px,
+      rgba(0, 0, 0, 0.03) 2px,
+      rgba(0, 0, 0, 0.03) 4px
+    ),
+    repeating-conic-gradient(
+      rgba(0, 0, 0, 0.015) 0% 25%,
+      transparent 0% 50%
+    ) 0 0 / 4px 4px;
+}
+
+#crt-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 60%,
+    rgba(0, 0, 0, 0.15) 100%
+  );
+}
+
+/* Very slight barrel curvature on the game area */
+#game-container {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+body {
+  perspective: 1800px;
+}
+
+#game-container canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  transform: perspective(1800px) rotateX(0.3deg) rotateY(0deg) scale(1.005);
+}
+
+/* ── Boot Screen ─────────────────────────────── */
+#boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #0a0a0a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.6s ease;
+}
+
+#boot-screen.fade-out {
+  opacity: 0;
+}
+
+#boot-screen.gone {
+  display: none;
+}
+
+#boot-text {
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  color: #60a040;
+  text-align: left;
+  line-height: 2.2;
+  white-space: pre-line;
+  text-shadow: 0 0 8px rgba(96, 160, 64, 0.3);
 }
 
 .hidden {

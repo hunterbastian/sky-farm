@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sky Farm</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -20,12 +23,18 @@
       <button id="reset-btn">Reset Farm</button>
     </div>
 
-    <div id="overlay" class="panel visible">
+    <div id="boot-screen">
+      <div id="boot-text"></div>
+    </div>
+
+    <div id="overlay" class="panel hidden">
       <h1>Sky Farm</h1>
       <p>A pixel farming game above the clouds.</p>
-      <p class="hint">Click tiles to farm · 1-2-3 switch tools · Scroll to cycle</p>
+      <p class="hint">Click tiles to farm · 1-4 switch tools · Scroll to cycle</p>
       <button id="start-btn">Start Farming</button>
     </div>
+
+    <div id="crt-overlay"></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

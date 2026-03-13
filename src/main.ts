@@ -2159,8 +2159,47 @@ function gameLoop(ticker: Ticker): void {
   updateCamera();
 }
 
+// ── Boot Screen ──────────────────────────────────────────
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function runBootSequence(): Promise<void> {
+  const bootScreen = document.getElementById("boot-screen")!;
+  const bootText = document.getElementById("boot-text")!;
+
+  const lines = [
+    "SKY FARM OS v1.0",
+    "\u00a9 2026 Cloud Systems Inc.",
+    "",
+    "Checking memory... 64KB OK",
+    "Loading pixel engine...",
+    "Initializing tile grid... 24x24",
+    "Spawning chickens... 4 found",
+    "Calibrating day/night cycle...",
+    "Planting wildflowers...",
+    "",
+    "Ready.",
+  ];
+
+  for (const line of lines) {
+    bootText.textContent += line + "\n";
+    await sleep(line === "" ? 150 : 180 + Math.random() * 120);
+  }
+
+  await sleep(600);
+  bootScreen.classList.add("fade-out");
+  await sleep(600);
+  bootScreen.classList.add("gone");
+
+  // Show title screen
+  overlay.classList.remove("hidden");
+  overlay.classList.add("visible");
+}
+
 // ── Boot ──────────────────────────────────────────────────
 async function boot(): Promise<void> {
+  await runBootSequence();
   await initPixi();
   app.stage.addChild(world);
   app.stage.addChild(nightOverlay);
