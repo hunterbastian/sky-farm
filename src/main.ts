@@ -1181,7 +1181,7 @@ const app = new Application();
 
 async function initPixi(): Promise<void> {
   await app.init({
-    background: 0x0a1628,
+    background: 0x6aaed8,
     resizeTo: window,
     antialias: false,
     roundPixels: true,
@@ -1389,12 +1389,42 @@ function drawIslandEdge(g: Graphics): void {
     if (!isOnIsland(ISLAND_SIZE, z)) g.rect(ISLAND_SIZE * TILE_PX - 1, z * TILE_PX, 1, TILE_PX).fill(COLORS.grassEdge);
   }
 
+  // ── Tapered island underside (rocky bottom) ──
+  const islandPx = ISLAND_SIZE * TILE_PX;
+  const underDepth = 6; // rows of tapering rock below cliff
+  const centerX = islandPx / 2;
+  for (let row = 0; row < underDepth; row++) {
+    const t = (row + 1) / underDepth; // 0→1 as we go deeper
+    const shrink = Math.pow(t, 0.7); // easing — narrows faster at bottom
+    const halfW = (islandPx / 2) * (1 - shrink * 0.6);
+    const rx = centerX - halfW;
+    const rz = islandPx + TILE_PX + row * TILE_PX;
+    const w = halfW * 2;
+    // Darkening gradient
+    const alpha = 1 - t * 0.3;
+    g.rect(rx, rz, w, TILE_PX).fill({ color: COLORS.cliffFace, alpha });
+    // Cracks
+    const rand = seededRandom(row * 333 + 7);
+    for (let i = 0; i < 3; i++) {
+      const cx = rx + Math.floor(rand() * (w - 4)) + 2;
+      const cz = rz + Math.floor(rand() * 10) + 2;
+      g.rect(cx, cz, 2, 1).fill({ color: COLORS.cliffShadow, alpha });
+    }
+    // Bottom darkening
+    g.rect(rx, rz + TILE_PX - 3, w, 3).fill({ color: COLORS.cliffDeep, alpha: 0.3 * alpha });
+  }
+  // Point at very bottom
+  const tipZ = islandPx + TILE_PX + underDepth * TILE_PX;
+  const tipW = islandPx * 0.08;
+  g.rect(centerX - tipW, tipZ, tipW * 2, 4).fill({ color: COLORS.cliffDeep, alpha: 0.6 });
+  g.rect(centerX - tipW * 0.4, tipZ + 4, tipW * 0.8, 3).fill({ color: COLORS.cliffDeep, alpha: 0.4 });
+
   // Drop shadow beneath the island
   const shadowAlpha = 0.12;
   for (let x = -1; x <= ISLAND_SIZE; x++) {
     const sx = x * TILE_PX;
-    g.rect(sx, ISLAND_SIZE * TILE_PX + TILE_PX, TILE_PX, 4).fill({ color: 0x000000, alpha: shadowAlpha });
-    g.rect(sx, ISLAND_SIZE * TILE_PX + TILE_PX + 4, TILE_PX, 4).fill({ color: 0x000000, alpha: shadowAlpha * 0.5 });
+    g.rect(sx, islandPx + TILE_PX, TILE_PX, 4).fill({ color: 0x000000, alpha: shadowAlpha });
+    g.rect(sx, islandPx + TILE_PX + 4, TILE_PX, 4).fill({ color: 0x000000, alpha: shadowAlpha * 0.5 });
   }
 }
 
@@ -2324,6 +2354,80 @@ function resetFarm(): void {
   updateHud();
 }
 
+// ── Sky Background ────────────────────────────────────────
+const skyGfx = new Graphics();
+
+interface SkyCloud {
+  x: number; y: number; w: number; h: number; speed: number; alpha: number;
+}
+const skyClouds: SkyCloud[] = [];
+for (let i = 0; i < 12; i++) {
+  skyClouds.push({
+    x: Math.random() * 2000 - 500,
+    y: Math.random() * 800,
+    w: 40 + Math.random() * 80,
+    h: 8 + Math.random() * 12,
+    speed: 4 + Math.random() * 8,
+    alpha: 0.15 + Math.random() * 0.2,
+  });
+}
+
+function updateSky(): void {
+  skyGfx.clear();
+  const sw = app.screen.width;
+  const sh = app.screen.height;
+  const hour = (clockTime / 3600) % 24;
+
+  // Sky gradient — changes with time of day
+  const dayTop = 0x6aaed8;
+  const dayBot = 0xb8d8f0;
+  const nightTop = 0x0a1628;
+  const nightBot = 0x142040;
+  const sunsetTop = 0xd08848;
+  const sunsetBot = 0xe8c080;
+
+  let topColor: number, botColor: number;
+  if (hour >= 5 && hour < 18) {
+    topColor = dayTop; botColor = dayBot;
+  } else if (hour >= 18 && hour < 21) {
+    const t = (hour - 18) / 3;
+    topColor = lerpColor(dayTop, sunsetTop, t);
+    botColor = lerpColor(dayBot, sunsetBot, t);
+  } else if (hour >= 21 && hour < 22.5) {
+    const t = (hour - 21) / 1.5;
+    topColor = lerpColor(sunsetTop, nightTop, t);
+    botColor = lerpColor(sunsetBot, nightBot, t);
+  } else if (hour >= 2 && hour < 5) {
+    const t = (hour - 2) / 3;
+    topColor = lerpColor(nightTop, dayTop, t);
+    botColor = lerpColor(nightBot, dayBot, t);
+  } else {
+    topColor = nightTop; botColor = nightBot;
+  }
+
+  // Draw sky gradient in horizontal bands
+  const bands = 16;
+  for (let i = 0; i < bands; i++) {
+    const t = i / (bands - 1);
+    const color = lerpColor(topColor, botColor, t);
+    const bandH = Math.ceil(sh / bands) + 1;
+    skyGfx.rect(0, Math.floor(t * sh), sw, bandH).fill(color);
+  }
+
+  // Drifting clouds
+  const isNight = hour < 2 || hour >= 22.5;
+  const cloudAlphaMul = isNight ? 0.3 : 1;
+  for (const cloud of skyClouds) {
+    cloud.x += cloud.speed * (1 / 60);
+    if (cloud.x > sw + 100) { cloud.x = -cloud.w - 50; cloud.y = Math.random() * sh; }
+    const a = cloud.alpha * cloudAlphaMul;
+    // Fluffy cloud shape — overlapping ellipses
+    skyGfx.ellipse(cloud.x, cloud.y, cloud.w * 0.5, cloud.h).fill({ color: 0xffffff, alpha: a * 0.5 });
+    skyGfx.ellipse(cloud.x - cloud.w * 0.2, cloud.y + 2, cloud.w * 0.35, cloud.h * 0.8).fill({ color: 0xffffff, alpha: a * 0.4 });
+    skyGfx.ellipse(cloud.x + cloud.w * 0.25, cloud.y + 1, cloud.w * 0.4, cloud.h * 0.9).fill({ color: 0xffffff, alpha: a * 0.45 });
+  }
+}
+
 // ── Day/Night Lighting ────────────────────────────────────
 const nightOverlay = new Graphics();
 
@@ -2476,6 +2580,7 @@ function gameLoop(ticker: Ticker): void {
   }
   hoveredTile = getHoveredTile();
   updateCursor();
+  updateSky();
   renderWorld();
   updateDayNight();
   updateCamera();
@@ -2523,6 +2628,7 @@ async function runBootSequence(): Promise<void> {
 async function boot(): Promise<void> {
   await runBootSequence();
   await initPixi();
+  app.stage.addChild(skyGfx);
   app.stage.addChild(world);
   app.stage.addChild(nightOverlay);
   setupInput();
