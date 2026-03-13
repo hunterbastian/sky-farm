@@ -159,6 +159,7 @@ interface CropState {
   type: CropTypeId;
   growth: number;
   watered: boolean;
+  growTimer: number; // real seconds accumulated toward next growth tick
 }
 
 interface CropDefinition {
@@ -181,7 +182,15 @@ const WORLD_DAY_SECONDS = 86_400;
 const REAL_CYCLE_SECONDS = 210; // 3.5 minutes real time per full day
 const TIME_SCALE = WORLD_DAY_SECONDS / REAL_CYCLE_SECONDS;
 const DAWN_SECONDS = 9 * 3600; // spawn at 9 AM (clear day)
-const SAVE_KEY = "sky_farm_save_v2";
+const SAVE_KEY = "sky_farm_save_v3";
+
+// ── Auto-Farm Timers ─────────────────────────────────────
+const AUTO_WATER_INTERVAL = 5;    // seconds between auto-watering all crops
+const CROP_GROW_SECONDS = 15;     // real seconds per growth tick (replaces dawn-based growth)
+const AUTO_HARVEST_DELAY = 2;     // seconds after maturity before auto-harvest
+const AUTO_REPLANT = true;        // auto-replant after harvest
+let autoWaterTimer = 0;
+let autoHarvestTimer = 0;
 
 const TOOLS: { id: ToolId; label: string; icon: string }[] = [
   { id: "pointer", label: "Pointer", icon: "👆" },
@@ -2638,13 +2647,71 @@ function updateClock(dt: number): void {
 }
 
 function dawnTick(): void {
+  // Dawn tick is now cosmetic only — auto-farm handles growth
+}
+
+function updateAutoFarm(dt: number): void {
+  // ── Auto-water all crops periodically ──
+  autoWaterTimer += dt;
+  if (autoWaterTimer >= AUTO_WATER_INTERVAL) {
+    autoWaterTimer = 0;
+    for (const crop of crops) {
+      if (!crop.watered) {
+        crop.watered = true;
+        spawnSplash(crop.x, crop.z);
+      }
+    }
+  }
+
+  // ── Continuous growth (real-time, not dawn-based) ──
   for (const crop of crops) {
-    if (crop.watered) {
+    if (!crop.watered) continue;
+    const def = CROP_DEFS[crop.type];
+    if (crop.growth >= def.growDays) continue; // already mature
+    crop.growTimer += dt;
+    if (crop.growTimer >= CROP_GROW_SECONDS) {
+      crop.growTimer -= CROP_GROW_SECONDS;
       const prev = crop.growth;
-      crop.growth = Math.min(crop.growth + 1, CROP_DEFS[crop.type].growDays);
+      crop.growth = Math.min(crop.growth + 1, def.growDays);
       if (crop.growth > prev) spawnGrowthSparkles(crop.x, crop.z);
     }
-    crop.watered = false;
+  }
+
+  // ── Auto-harvest mature crops ──
+  autoHarvestTimer += dt;
+  if (autoHarvestTimer >= AUTO_HARVEST_DELAY) {
+    autoHarvestTimer = 0;
+    for (let i = crops.length - 1; i >= 0; i--) {
+      const crop = crops[i]!;
+      const def = CROP_DEFS[crop.type];
+      if (crop.growth >= def.growDays) {
+        coins += def.sellPrice;
+        spawnHarvestBurst(crop.x, crop.z, crop.type);
+        spawnFloatingText(crop.x, crop.z, "+" + def.sellPrice, 0xf0e060);
+        sfxCoin();
+
+        if (AUTO_REPLANT) {
+          // Replant same crop type
+          crop.growth = 0;
+          crop.watered = false;
+          crop.growTimer = 0;
+          spawnSeedPop(crop.x, crop.z);
+        } else {
+          crops.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  // ── Auto-collect eggs ──
+  for (let i = eggs.length - 1; i >= 0; i--) {
+    const e = eggs[i]!;
+    if (e.age > 8) { // auto-collect after 8 seconds
+      eggs.splice(i, 1);
+      coins += 3;
+      spawnFloatingText(Math.round(e.x), Math.round(e.z), "+3", 0xf0e060);
+      sfxCoin();
+    }
   }
 }
 
@@ -2730,7 +2797,7 @@ function useTool(): void {
     case "seeds":
       if (tile === "farmland") {
         if (!crops.some((c) => c.x === x && c.z === z)) {
-          crops.push({ x, z, type: CROP_IDS[selectedSeed]!, growth: 0, watered: false });
+          crops.push({ x, z, type: CROP_IDS[selectedSeed]!, growth: 0, watered: false, growTimer: 0 });
           sfxPlant();
           spawnSeedPop(x, z);
         }
@@ -2865,7 +2932,7 @@ function updateHud(): void {
 // ── Save / Load ───────────────────────────────────────────
 function saveGame(): void {
   const data = {
-    version: 2,
+    version: 3,
     clockTime,
     clockDay,
     tiles: tiles.map((row) => [...row]),
@@ -2885,7 +2952,7 @@ function loadGame(): boolean {
   if (!raw) return false;
   try {
     const data = JSON.parse(raw);
-    if (data.version !== 2) return false;
+    if (data.version !== 2 && data.version !== 3) return false;
     clockTime = data.clockTime ?? DAWN_SECONDS;
     clockDay = data.clockDay ?? 1;
     if (data.tiles) {
@@ -2896,7 +2963,11 @@ function loadGame(): boolean {
       }
     }
     crops.length = 0;
-    if (data.crops) crops.push(...data.crops);
+    if (data.crops) {
+      for (const c of data.crops) {
+        crops.push({ ...c, growTimer: c.growTimer ?? 0 });
+      }
+    }
     coins = data.coins ?? 0;
     wood = data.wood ?? 0;
     if (data.trees) {
@@ -3091,6 +3162,84 @@ function updateDayNight(): void {
 }
 
 // ── Input ─────────────────────────────────────────────────
+// ── Smart Tap (mobile-friendly: context-aware interaction) ──
+function smartTap(): void {
+  if (gameMode !== "playing" || !hoveredTile) return;
+  const { x, z } = hoveredTile;
+  const tile = tiles[z]?.[x];
+  if (!tile) return;
+
+  // Collect eggs
+  if (collectEgg(x, z)) {
+    sfxEgg(); sfxCoin();
+    spawnFloatingText(x, z, "+3", 0xf0e060);
+    updateHud();
+    return;
+  }
+
+  if (isPondTile(x, z) || isPenTile(x, z)) return;
+
+  // Tap grass → till it
+  if (tile === "grass") {
+    tiles[z]![x] = "farmland";
+    sfxTill();
+    spawnDirtPuff(x, z);
+    updateHud();
+    return;
+  }
+
+  // Tap farmland → plant if empty, harvest if mature
+  if (tile === "farmland") {
+    const cropIdx = crops.findIndex((c) => c.x === x && c.z === z);
+    if (cropIdx >= 0) {
+      const crop = crops[cropIdx]!;
+      const def = CROP_DEFS[crop.type];
+      if (crop.growth >= def.growDays) {
+        // Manual harvest
+        coins += def.sellPrice;
+        spawnHarvestBurst(x, z, crop.type);
+        spawnFloatingText(x, z, "+" + def.sellPrice, 0xf0e060);
+        sfxHarvest();
+        // Replant
+        crop.growth = 0;
+        crop.watered = false;
+        crop.growTimer = 0;
+        spawnSeedPop(x, z);
+      } else if (!crop.watered) {
+        // Manual water for a speed boost
+        crop.watered = true;
+        spawnSplash(x, z);
+        sfxWater();
+      }
+    } else {
+      // Empty farmland → plant
+      crops.push({ x, z, type: CROP_IDS[selectedSeed]!, growth: 0, watered: false, growTimer: 0 });
+      sfxPlant();
+      spawnSeedPop(x, z);
+    }
+    updateHud();
+    return;
+  }
+}
+
+function handleTouch(clientX: number, clientY: number): void {
+  // Convert touch position to renderer coordinates
+  const canvas = app.canvas as HTMLCanvasElement;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const px = (clientX - rect.left) * scaleX;
+  const py = (clientY - rect.top) * scaleY;
+  const worldX = (px - world.x) / world.scale.x;
+  const worldZ = (py - world.y) / world.scale.y;
+  const tileX = Math.floor(worldX / TILE_PX);
+  const tileZ = Math.floor(worldZ / TILE_PX);
+  if (tileX >= 0 && tileX < ISLAND_SIZE && tileZ >= 0 && tileZ < ISLAND_SIZE) {
+    hoveredTile = { x: tileX, z: tileZ };
+    smartTap();
+  }
+}
+
 function setupInput(): void {
   window.addEventListener("keydown", (e) => {
     if (gameMode !== "playing") return;
@@ -3115,7 +3264,7 @@ function setupInput(): void {
     if (e.button === 0) {
       mouseDown = true;
       toolCooldown = 0;
-      useTool();
+      smartTap();
     }
   });
 
@@ -3124,6 +3273,17 @@ function setupInput(): void {
   });
 
   window.addEventListener("mouseleave", () => { mouseDown = false; });
+
+  // ── Touch support for mobile ──
+  window.addEventListener("touchstart", (e) => {
+    if (gameMode !== "playing") return;
+    if (e.target instanceof HTMLButtonElement || (e.target as HTMLElement).closest?.("#toolbar")) return;
+    const touch = e.touches[0];
+    if (touch) {
+      e.preventDefault();
+      handleTouch(touch.clientX, touch.clientY);
+    }
+  }, { passive: false });
 
   window.addEventListener("contextmenu", (e) => e.preventDefault());
 
@@ -3166,6 +3326,7 @@ function gameLoop(ticker: Ticker): void {
     updateFloatingTexts(dt);
     updateShake();
     updateChopSwing(dt);
+    updateAutoFarm(dt);
 
     // Hold-down continuous tool use
     if (mouseDown) {
