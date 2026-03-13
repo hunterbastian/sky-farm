@@ -151,7 +151,7 @@ function updateShake(): void {
 // ── Types ─────────────────────────────────────────────────
 type TileType = "grass" | "farmland";
 type CropTypeId = "sky_wheat" | "star_berry" | "cloud_pumpkin" | "moon_flower";
-type ToolId = "hoe" | "water" | "seeds" | "axe";
+type ToolId = "pointer" | "hoe" | "water" | "seeds" | "axe";
 
 interface CropState {
   x: number;
@@ -172,7 +172,7 @@ interface CropDefinition {
 const ISLAND_SIZE = 24;
 const TILE_PX = 16;
 const RENDER_SCALE = 3;
-const TOOL_COUNT = 4;
+const TOOL_COUNT = 5;
 
 // Day cycle: 3.5 min total (3 min day + 30s night)
 // We map 24 game-hours onto 210 real seconds
@@ -184,6 +184,7 @@ const DAWN_SECONDS = 9 * 3600; // spawn at 9 AM (clear day)
 const SAVE_KEY = "sky_farm_save_v2";
 
 const TOOLS: { id: ToolId; label: string; icon: string }[] = [
+  { id: "pointer", label: "Pointer", icon: "👆" },
   { id: "hoe", label: "Hoe", icon: "⛏" },
   { id: "water", label: "Water", icon: "💧" },
   { id: "seeds", label: "Seeds", icon: "🌱" },
@@ -722,7 +723,7 @@ function spawnMapleLeaves(): void {
     if (Math.random() > 0.4) continue;
     const cx = tree.x * TILE_PX + TILE_PX / 2;
     const cz = tree.z * TILE_PX - 6;
-    const colors = [0xcc2828, 0xd44020, 0xe06030, 0xb82020, 0xf08040, 0xd83838];
+    const colors = [0xf0a0b0, 0xd87088, 0xf8c8d0, 0xf8e8f0, 0xb85070, 0xe890a0];
     mapleLeaves.push({
       x: cx + (Math.random() - 0.5) * 12,
       z: cz + Math.random() * 6,
@@ -775,52 +776,76 @@ function drawMapleTree(g: Graphics, tree: MapleTree): void {
   const cx = tree.x * TILE_PX + TILE_PX / 2;
   const cz = tree.z * TILE_PX + TILE_PX;
   const now = performance.now() / 1000;
-  const sway = Math.sin(now * 1.0 + tree.variant * 3) * 0.5;
+  const sway = Math.sin(now * 0.8 + tree.variant * 3) * 0.4;
   const sw = Math.round(sway);
 
-  // Shadow
-  g.ellipse(cx, cz + 1, 5, 2).fill({ color: 0x000000, alpha: 0.12 });
+  // Shadow — wider, softer for a grand tree
+  g.ellipse(cx, cz + 2, 9, 3).fill({ color: 0x000000, alpha: 0.10 });
 
-  // Trunk — slender, slightly curved
-  g.rect(cx - 1, cz - 14, 3, 15).fill(0x5a3828);
-  g.rect(cx, cz - 14, 1, 15).fill(0x6a4838);
-  // Bark texture
-  g.rect(cx - 1, cz - 10, 1, 1).fill(0x4a2818);
-  g.rect(cx + 1, cz - 6, 1, 1).fill(0x4a2818);
+  // Trunk — dark, gnarled, slightly twisted
+  g.rect(cx - 2, cz - 16, 4, 17).fill(0x3a2418);
+  g.rect(cx - 1, cz - 16, 2, 17).fill(0x4a3428);
+  // Trunk highlight
+  g.rect(cx, cz - 12, 1, 10).fill({ color: 0x5a4438, alpha: 0.4 });
+  // Bark knots
+  g.rect(cx - 2, cz - 10, 1, 2).fill(0x2a1810);
+  g.rect(cx + 2, cz - 6, 1, 1).fill(0x2a1810);
+  g.rect(cx - 2, cz - 4, 1, 1).fill(0x2a1810);
 
-  // Branches — thin reaching out
-  g.rect(cx - 4, cz - 12, 4, 1).fill(0x5a3828);
-  g.rect(cx + 1, cz - 10, 4, 1).fill(0x5a3828);
+  // Visible branches reaching outward
+  g.rect(cx - 6, cz - 14, 5, 1).fill(0x3a2418);
+  g.rect(cx - 7, cz - 15, 2, 1).fill(0x3a2418);
+  g.rect(cx + 2, cz - 12, 5, 1).fill(0x3a2418);
+  g.rect(cx + 6, cz - 13, 2, 1).fill(0x3a2418);
+  // Upward branch
+  g.rect(cx - 1, cz - 18, 2, 3).fill(0x3a2418);
 
-  // Canopy — red/orange maple leaves, airy
-  const r1 = 0xcc2828;
-  const r2 = 0xd44020;
-  const r3 = 0xe06838;
-  const r4 = 0xf08848;
+  // Canopy — cherry blossom: pink/white, airy, drooping
+  const pink = 0xf0a0b0;
+  const pinkDeep = 0xd87088;
+  const pinkLight = 0xf8c8d0;
+  const white = 0xf8e8f0;
+  const pinkDark = 0xb85070;
 
-  // Main canopy — irregular clumps
-  g.rect(cx - 6 + sw, cz - 18, 12, 5).fill(r1);
-  g.rect(cx - 5 + sw, cz - 19, 10, 1).fill(r2);
-  g.rect(cx - 5 + sw, cz - 13, 10, 1).fill(r1);
-  // Upper
-  g.rect(cx - 4 + sw, cz - 22, 8, 4).fill(r2);
-  g.rect(cx - 3 + sw, cz - 23, 6, 1).fill(r3);
-  // Top tuft
-  g.rect(cx - 2 + sw, cz - 24, 4, 1).fill(r3);
-  g.rect(cx - 1 + sw, cz - 25, 2, 1).fill(r4);
+  // Wide drooping canopy — bigger and more organic than oaks
+  // Core canopy mass
+  g.rect(cx - 8 + sw, cz - 22, 16, 6).fill(pinkDeep);
+  g.rect(cx - 9 + sw, cz - 20, 18, 4).fill(pink);
+  g.rect(cx - 7 + sw, cz - 24, 14, 3).fill(pink);
+  // Top crown
+  g.rect(cx - 5 + sw, cz - 26, 10, 3).fill(pinkLight);
+  g.rect(cx - 3 + sw, cz - 28, 6, 2).fill(pinkLight);
+  g.rect(cx - 2 + sw, cz - 29, 4, 1).fill(white);
 
-  // Light dappling
+  // Drooping blossom clusters on sides
+  g.rect(cx - 10 + sw, cz - 18, 4, 3).fill(pink);
+  g.rect(cx - 11 + sw, cz - 16, 3, 2).fill(pinkLight);
+  g.rect(cx + 6 + sw, cz - 18, 5, 3).fill(pink);
+  g.rect(cx + 8 + sw, cz - 16, 3, 2).fill(pinkLight);
+
+  // Lower drooping wisps
+  g.rect(cx - 8 + sw, cz - 16, 3, 2).fill({ color: pinkLight, alpha: 0.7 });
+  g.rect(cx + 5 + sw, cz - 16, 3, 2).fill({ color: pinkLight, alpha: 0.7 });
+  g.rect(cx - 6 + sw, cz - 14, 2, 2).fill({ color: pink, alpha: 0.5 });
+  g.rect(cx + 4 + sw, cz - 14, 2, 2).fill({ color: pink, alpha: 0.5 });
+
+  // Blossom highlights — scattered white/bright pink spots
   const r = seededRandom(tree.variant * 777);
-  for (let i = 0; i < 5; i++) {
-    const lx = Math.floor(r() * 10) - 5;
-    const lz = Math.floor(r() * 10) - 20;
-    g.rect(cx + lx + sw, cz + lz, 2, 1).fill({ color: r4, alpha: 0.6 });
+  for (let i = 0; i < 8; i++) {
+    const lx = Math.floor(r() * 16) - 8;
+    const lz = Math.floor(r() * 12) - 24;
+    g.rect(cx + lx + sw, cz + lz, 2, 1).fill({ color: white, alpha: 0.7 });
   }
-  // Darker depth
-  for (let i = 0; i < 3; i++) {
-    const lx = Math.floor(r() * 8) - 4;
-    const lz = Math.floor(r() * 8) - 18;
-    g.rect(cx + lx + sw, cz + lz, 2, 2).fill({ color: 0xa01818, alpha: 0.4 });
+  for (let i = 0; i < 5; i++) {
+    const lx = Math.floor(r() * 14) - 7;
+    const lz = Math.floor(r() * 10) - 22;
+    g.rect(cx + lx + sw, cz + lz, 1, 1).fill({ color: pinkLight, alpha: 0.8 });
+  }
+  // Depth shadows inside canopy
+  for (let i = 0; i < 4; i++) {
+    const lx = Math.floor(r() * 12) - 6;
+    const lz = Math.floor(r() * 8) - 22;
+    g.rect(cx + lx + sw, cz + lz, 2, 2).fill({ color: pinkDark, alpha: 0.3 });
   }
 }
 
@@ -874,11 +899,11 @@ function drawHiveAndBees(g: Graphics, tree: TreeState): void {
   const cx = tree.x * TILE_PX + TILE_PX / 2;
   const cz = tree.z * TILE_PX + TILE_PX; // base of tree (matches drawTree)
   const now = performance.now() / 1000;
-  const sway = Math.sin(now * 1.2 + tree.variant * 2) * 0.6;
+  const sway = Math.sin(now * 0.9 + tree.variant * 2) * 0.5;
   const sw = Math.round(sway);
-  // Hive hangs from bottom of canopy (canopy bottom is cz - 10)
-  const hiveX = cx + 4 + sw;
-  const hiveZ = cz - 10;
+  // Hive hangs from bottom of canopy (canopy bottom is cz - 16)
+  const hiveX = cx + 5 + sw;
+  const hiveZ = cz - 16;
 
   // Branch stub connecting hive to canopy
   g.rect(hiveX + 1, hiveZ, 1, 2).fill(0x6a4830);
@@ -1153,6 +1178,7 @@ const cursorAxe = makePixelCursor((ctx) => {
 }, 2, 2);
 
 const toolCursors: Record<ToolId, string> = {
+  pointer: "default",
   hoe: cursorHoe,
   water: cursorWater,
   seeds: cursorSeeds,
@@ -1660,61 +1686,82 @@ function drawTree(g: Graphics, tree: TreeState): void {
       }
     };
 
-    g.ellipse(cx, cz + 1, 6 * fallAlpha, 2 * fallAlpha).fill({ color: 0x000000, alpha: 0.15 * fallAlpha });
-    rRect(cx - 2, cz - 12, 4, 13, 0x6a4830);
-    rRect(cx - 1, cz - 12, 2, 13, 0x7a5a3a);
-    rRect(cx - 7, cz - 16, 14, 6, COLORS.leafDark);
-    rRect(cx - 6, cz - 17, 12, 1, COLORS.leafDark);
-    rRect(cx - 6, cz - 10, 12, 1, COLORS.leafDark);
-    rRect(cx - 6, cz - 20, 12, 6, COLORS.leafMid);
-    rRect(cx - 5, cz - 21, 10, 1, COLORS.leafMid);
-    rRect(cx - 4, cz - 23, 8, 4, COLORS.leafLight);
-    rRect(cx - 3, cz - 24, 6, 1, COLORS.leafLight);
-    rRect(cx - 2, cz - 25, 4, 1, COLORS.leafHighlight);
+    g.ellipse(cx, cz + 2, 10 * fallAlpha, 3 * fallAlpha).fill({ color: 0x000000, alpha: 0.12 * fallAlpha });
+    rRect(cx - 3, cz - 18, 6, 19, 0x5a3820);
+    rRect(cx - 2, cz - 18, 4, 19, 0x6a4830);
+    rRect(cx - 10, cz - 22, 20, 6, COLORS.leafDark);
+    rRect(cx - 9, cz - 23, 18, 1, COLORS.leafDark);
+    rRect(cx - 9, cz - 28, 18, 7, COLORS.leafMid);
+    rRect(cx - 8, cz - 29, 16, 1, COLORS.leafMid);
+    rRect(cx - 6, cz - 32, 12, 4, COLORS.leafLight);
+    rRect(cx - 5, cz - 33, 10, 1, COLORS.leafLight);
+    rRect(cx - 3, cz - 34, 6, 1, COLORS.leafHighlight);
+    rRect(cx - 2, cz - 35, 4, 1, COLORS.leafHighlight);
     return;
   }
 
-  // ── Normal upright drawing (no closures, no trig) ──
+  // ── Normal upright drawing — grand LOTR-style oak ──
   const now = performance.now() / 1000;
-  const sw = Math.round(Math.sin(now * 1.2 + tree.variant * 2) * 0.6);
+  const sw = Math.round(Math.sin(now * 0.9 + tree.variant * 2) * 0.5);
 
-  // Shadow
-  g.ellipse(cx, cz + 1, 6, 2).fill({ color: 0x000000, alpha: 0.15 });
-  // Trunk
-  g.rect(cx - 2, cz - 12, 4, 13).fill(0x6a4830);
-  g.rect(cx - 1, cz - 12, 2, 13).fill(0x7a5a3a);
-  g.rect(cx, cz - 10, 1, 8).fill({ color: 0x8a6a4a, alpha: 0.5 });
-  g.rect(cx - 2, cz - 8, 1, 1).fill(0x5a3820);
-  g.rect(cx + 1, cz - 5, 1, 1).fill(0x5a3820);
+  // Shadow — wider for a grand tree
+  g.ellipse(cx, cz + 2, 10, 3).fill({ color: 0x000000, alpha: 0.12 });
 
-  // Canopy
-  g.rect(cx - 7 + sw, cz - 16, 14, 6).fill(COLORS.leafDark);
-  g.rect(cx - 6 + sw, cz - 17, 12, 1).fill(COLORS.leafDark);
-  g.rect(cx - 6 + sw, cz - 10, 12, 1).fill(COLORS.leafDark);
-  g.rect(cx - 6 + sw, cz - 20, 12, 6).fill(COLORS.leafMid);
-  g.rect(cx - 5 + sw, cz - 21, 10, 1).fill(COLORS.leafMid);
-  g.rect(cx - 4 + sw, cz - 23, 8, 4).fill(COLORS.leafLight);
-  g.rect(cx - 3 + sw, cz - 24, 6, 1).fill(COLORS.leafLight);
-  g.rect(cx - 2 + sw, cz - 25, 4, 1).fill(COLORS.leafHighlight);
+  // Exposed roots
+  g.rect(cx - 4, cz - 1, 2, 3).fill(0x5a3820);
+  g.rect(cx + 3, cz - 1, 2, 2).fill(0x5a3820);
+  g.rect(cx - 5, cz, 1, 2).fill(0x4a2818);
 
-  // Dappled light
+  // Trunk — thick, gnarled
+  g.rect(cx - 3, cz - 18, 6, 19).fill(0x5a3820);
+  g.rect(cx - 2, cz - 18, 4, 19).fill(0x6a4830);
+  g.rect(cx - 1, cz - 16, 2, 14).fill({ color: 0x7a5a3a, alpha: 0.6 });
+  // Bark knots and texture
+  g.rect(cx - 3, cz - 12, 1, 2).fill(0x3a2010);
+  g.rect(cx + 3, cz - 8, 1, 2).fill(0x3a2010);
+  g.rect(cx - 2, cz - 5, 1, 1).fill(0x3a2010);
+  g.rect(cx + 2, cz - 14, 1, 1).fill(0x3a2010);
+  // Trunk highlight (light side)
+  g.rect(cx + 1, cz - 14, 1, 10).fill({ color: 0x8a6a4a, alpha: 0.4 });
+
+  // Branches visible through canopy
+  g.rect(cx - 7, cz - 17, 5, 1).fill(0x5a3820);
+  g.rect(cx + 3, cz - 16, 6, 1).fill(0x5a3820);
+
+  // Canopy — wide, layered, majestic
+  // Deep shadow layer
+  g.rect(cx - 10 + sw, cz - 22, 20, 6).fill(COLORS.leafDark);
+  g.rect(cx - 9 + sw, cz - 23, 18, 1).fill(COLORS.leafDark);
+  g.rect(cx - 9 + sw, cz - 16, 18, 1).fill(COLORS.leafDark);
+  // Main canopy
+  g.rect(cx - 9 + sw, cz - 28, 18, 7).fill(COLORS.leafMid);
+  g.rect(cx - 8 + sw, cz - 29, 16, 1).fill(COLORS.leafMid);
+  // Upper crown
+  g.rect(cx - 6 + sw, cz - 32, 12, 4).fill(COLORS.leafLight);
+  g.rect(cx - 5 + sw, cz - 33, 10, 1).fill(COLORS.leafLight);
+  // Top tuft
+  g.rect(cx - 3 + sw, cz - 34, 6, 1).fill(COLORS.leafHighlight);
+  g.rect(cx - 2 + sw, cz - 35, 4, 1).fill(COLORS.leafHighlight);
+
+  // Dappled light highlights
   const r = seededRandom(tree.variant * 999);
-  for (let i = 0; i < 6; i++) {
-    const lx = Math.floor(r() * 10) - 5;
-    const lz = Math.floor(r() * 10) - 20;
-    g.rect(cx + lx + sw, cz + lz, 2, 1).fill({ color: COLORS.leafHighlight, alpha: 0.6 });
+  for (let i = 0; i < 10; i++) {
+    const lx = Math.floor(r() * 18) - 9;
+    const lz = Math.floor(r() * 16) - 30;
+    g.rect(cx + lx + sw, cz + lz, 2, 1).fill({ color: COLORS.leafHighlight, alpha: 0.5 });
   }
-  for (let i = 0; i < 4; i++) {
-    const lx = Math.floor(r() * 10) - 5;
-    const lz = Math.floor(r() * 8) - 18;
-    g.rect(cx + lx + sw, cz + lz, 2, 2).fill({ color: 0x1e6a10, alpha: 0.4 });
+  // Deep shadow spots for depth
+  for (let i = 0; i < 6; i++) {
+    const lx = Math.floor(r() * 16) - 8;
+    const lz = Math.floor(r() * 12) - 28;
+    g.rect(cx + lx + sw, cz + lz, 2, 2).fill({ color: 0x1e5a10, alpha: 0.35 });
   }
 
   // Chop damage
   if (tree.chopTime > 0 && tree.chopTime < CHOP_HITS) {
     for (let i = 0; i < tree.chopTime; i++) {
-      g.rect(cx - 2, cz - 6 + i * 3, 3, 1).fill(0xc4a870);
-      g.rect(cx - 2, cz - 5 + i * 3, 2, 1).fill(0x4a2810);
+      g.rect(cx - 3, cz - 8 + i * 3, 4, 1).fill(0xc4a870);
+      g.rect(cx - 3, cz - 7 + i * 3, 3, 1).fill(0x4a2810);
     }
   }
 }
@@ -2139,6 +2186,23 @@ function useTool(): void {
   const tool = TOOLS[selectedTool]!.id;
 
   switch (tool) {
+    case "pointer":
+      // Pointer can harvest mature crops by clicking
+      if (tile === "farmland") {
+        const cropIdx = crops.findIndex((c) => c.x === x && c.z === z);
+        if (cropIdx >= 0) {
+          const crop = crops[cropIdx]!;
+          if (crop.growth >= CROP_DEFS[crop.type].growDays) {
+            const price = CROP_DEFS[crop.type].sellPrice;
+            coins += price;
+            crops.splice(cropIdx, 1);
+            sfxHarvest();
+            spawnFloatingText(x, z, "+" + price, 0xf0e060);
+          }
+        }
+      }
+      break;
+
     case "hoe":
       if (tile === "grass") {
         tiles[z]![x] = "farmland";

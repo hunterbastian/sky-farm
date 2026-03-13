@@ -12,7 +12,9 @@ Top-down 2D pixel farming game built with PixiJS v8 + TypeScript + Vite. Stardew
 - Vercel: https://sky-farm.vercel.app
 - GitHub: https://github.com/hunterbastian/sky-farm
 - Vercel project name is `sky-islands` (aliased to `sky-farm.vercel.app`)
-- `vercel --prod` to deploy, then `open https://sky-farm.vercel.app`
+- Deploy: `vercel --prod && vercel alias set $(vercel ls sky-islands 2>&1 | grep Production | head -1 | awk '{print $3}') sky-farm.vercel.app`
+- Or simpler: `vercel --prod` then `vercel alias set <deployment-url> sky-farm.vercel.app`
+- **`vercel --prod` alone only updates `sky-islands.vercel.app` — must re-alias to `sky-farm.vercel.app`**
 - **Always push to git AND deploy after every change**
 
 ## Architecture
