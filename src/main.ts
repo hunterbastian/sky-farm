@@ -1759,6 +1759,95 @@ function drawHighlight(g: Graphics, tx: number, tz: number): void {
   g.rect(x, z + TILE_PX - 1, TILE_PX, 1).fill({ color, alpha: 0.6 });
 }
 
+// ── Little Woodchopper ────────────────────────────────────
+let chopSwingTimer = 0; // >0 while swing animation plays
+const CHOP_SWING_DURATION = 0.25; // seconds
+
+function updateChopSwing(dt: number): void {
+  if (chopSwingTimer > 0) chopSwingTimer = Math.max(0, chopSwingTimer - dt);
+}
+
+function triggerChopSwing(): void {
+  chopSwingTimer = CHOP_SWING_DURATION;
+}
+
+function drawWoodchopper(g: Graphics, tx: number, tz: number): void {
+  // Little character standing next to the tile, facing the tree
+  const cx = tx * TILE_PX + TILE_PX / 2 + 6; // offset right of tile center
+  const cz = tz * TILE_PX + TILE_PX - 1; // feet at bottom of tile
+
+  // ── Body ──
+  // Boots
+  g.rect(cx - 2, cz - 1, 2, 2).fill(0x5a3820);
+  g.rect(cx + 1, cz - 1, 2, 2).fill(0x5a3820);
+  // Pants
+  g.rect(cx - 2, cz - 4, 2, 3).fill(0x4a6a8a);
+  g.rect(cx + 1, cz - 4, 2, 3).fill(0x4a6a8a);
+  // Belt
+  g.rect(cx - 2, cz - 5, 5, 1).fill(0x6a4830);
+  // Shirt
+  g.rect(cx - 2, cz - 8, 5, 3).fill(0xc44040);
+  // Shirt highlight
+  g.rect(cx - 1, cz - 7, 3, 1).fill({ color: 0xe06060, alpha: 0.5 });
+  // Head (skin)
+  g.rect(cx - 1, cz - 11, 4, 3).fill(0xf0c490);
+  // Eyes
+  g.rect(cx - 1, cz - 10, 1, 1).fill(0x2a2a2a);
+  g.rect(cx + 2, cz - 10, 1, 1).fill(0x2a2a2a);
+  // Hair
+  g.rect(cx - 2, cz - 12, 5, 2).fill(0x6a3a1a);
+  g.rect(cx - 2, cz - 11, 1, 1).fill(0x6a3a1a);
+
+  // ── Axe in hand ──
+  // Swing angle: 0 at rest (held up), swings down to ~90deg
+  const swingT = chopSwingTimer > 0 ? 1 - (chopSwingTimer / CHOP_SWING_DURATION) : 0;
+  const swingActive = chopSwingTimer > 0;
+  // Ease-out bounce for the swing
+  const eased = swingActive ? (swingT < 0.6 ? swingT / 0.6 : 1 - (swingT - 0.6) / 0.4 * 0.3) : 0;
+  const angle = eased * (Math.PI / 2.2); // swing arc
+
+  // Arm (always drawn)
+  const armX = cx - 3;
+  const armZ = cz - 7;
+
+  if (swingActive) {
+    // Animated arm + axe
+    const cosA = Math.cos(-angle);
+    const sinA = Math.sin(-angle);
+
+    // Arm pixels (2px long, rotated)
+    for (let i = 0; i < 3; i++) {
+      const ax = Math.round(armX + sinA * i);
+      const az = Math.round(armZ - cosA * i);
+      g.rect(ax, az, 1, 1).fill(0xf0c490);
+    }
+
+    // Axe handle (extends from arm)
+    for (let i = 3; i < 8; i++) {
+      const hx = Math.round(armX + sinA * i);
+      const hz = Math.round(armZ - cosA * i);
+      g.rect(hx, hz, 1, 1).fill(0x8b6840);
+    }
+
+    // Axe head (at end of handle)
+    const headX = Math.round(armX + sinA * 8);
+    const headZ = Math.round(armZ - cosA * 8);
+    // Blade perpendicular to handle
+    for (let i = -1; i <= 1; i++) {
+      g.rect(Math.round(headX + cosA * i), Math.round(headZ + sinA * i), 2, 2).fill(0xc0c0c0);
+    }
+    g.rect(Math.round(headX + cosA * -1), Math.round(headZ + sinA * -1), 1, 1).fill(0xe0e0e0);
+  } else {
+    // Resting pose: arm up holding axe over shoulder
+    g.rect(armX, armZ - 2, 1, 3).fill(0xf0c490);
+    // Handle going up
+    g.rect(armX, armZ - 7, 1, 5).fill(0x8b6840);
+    // Axe head at top
+    g.rect(armX - 1, armZ - 9, 3, 2).fill(0xc0c0c0);
+    g.rect(armX - 1, armZ - 9, 1, 2).fill(0xe0e0e0);
+  }
+}
+
 // ── Graphics Objects ──────────────────────────────────────
 const groundGfx = new Graphics();
 const objectGfx = new Graphics();
@@ -1926,6 +2015,10 @@ function renderWorld(): void {
 
   if (hoveredTile && hoveredTile.x >= 0 && hoveredTile.x < ISLAND_SIZE && hoveredTile.z >= 0 && hoveredTile.z < ISLAND_SIZE) {
     drawHighlight(uiGfx, hoveredTile.x, hoveredTile.z);
+    // Draw woodchopper when axe is selected
+    if (TOOLS[selectedTool]!.id === "axe") {
+      drawWoodchopper(objectGfx, hoveredTile.x, hoveredTile.z);
+    }
   }
 }
 
@@ -2032,6 +2125,7 @@ function useTool(): void {
       if (tree) {
         tree.chopTime += 1;
         sfxChop();
+        triggerChopSwing();
         triggerShake(2);
         if (tree.chopTime >= CHOP_HITS) {
           wood += 3;
@@ -2362,6 +2456,7 @@ function gameLoop(ticker: Ticker): void {
     updateCloudShadows(dt);
     updateFloatingTexts(dt);
     updateShake();
+    updateChopSwing(dt);
 
     // Hold-down continuous tool use
     if (mouseDown) {
