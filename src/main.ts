@@ -303,10 +303,10 @@ function drawChicken(g: Graphics, c: Chicken): void {
 
   // Color variants
   const bodyColors = [
-    { body: 0xf0e8d0, wing: 0xe0d4b0, dark: 0xc4b890 }, // white
-    { body: 0xd4a050, wing: 0xc09040, dark: 0xa07830 }, // brown
-    { body: 0xf0c878, wing: 0xe0b868, dark: 0xc49848 }, // golden
-    { body: 0xc0c0c0, wing: 0xa8a8a8, dark: 0x909090 }, // grey
+    { body: 0xf0d850, wing: 0xe0c840, dark: 0xc4a830 }, // yellow
+    { body: 0xf0e060, wing: 0xe0d048, dark: 0xc8b038 }, // light yellow
+    { body: 0xe8c840, wing: 0xd8b838, dark: 0xb89828 }, // golden yellow
+    { body: 0xf0e878, wing: 0xe0d860, dark: 0xc8c048 }, // pale yellow
   ];
   const col = bodyColors[c.variant % bodyColors.length]!;
 
