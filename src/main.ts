@@ -544,16 +544,20 @@ function updateEggs(dt: number): void {
 }
 
 function drawEggs(g: Graphics): void {
+  const now = performance.now() / 1000;
   for (const e of eggs) {
     const px = Math.round(e.x * TILE_PX) + 6;
     const pz = Math.round(e.z * TILE_PX) + 12;
+    // Gentle wobble
+    const wobble = Math.sin(now * 2.5 + e.x * 7 + e.z * 11) * 0.4;
+    const wx = Math.round(wobble);
     // Shadow
-    g.ellipse(px + 1, pz + 3, 2, 1).fill({ color: 0x000000, alpha: 0.08 });
+    g.ellipse(px + 1 + wx, pz + 3, 2, 1).fill({ color: 0x000000, alpha: 0.08 });
     // Egg — white oval
-    g.rect(px, pz, 3, 3).fill(0xf8f0e0);
-    g.rect(px + 1, pz - 1, 1, 1).fill(0xf8f0e0);
-    g.rect(px, pz, 1, 1).fill({ color: 0xffffff, alpha: 0.4 });
-    g.rect(px + 1, pz + 2, 2, 1).fill(0xe8e0d0);
+    g.rect(px + wx, pz, 3, 3).fill(0xf8f0e0);
+    g.rect(px + 1 + wx, pz - 1, 1, 1).fill(0xf8f0e0);
+    g.rect(px + wx, pz, 1, 1).fill({ color: 0xffffff, alpha: 0.4 });
+    g.rect(px + 1 + wx, pz + 2, 2, 1).fill(0xe8e0d0);
   }
 }
 
@@ -1059,6 +1063,218 @@ function drawSplashes(g: Graphics): void {
     // Lighter center for sheen
     if (sz > 1 && alpha > 0.3) {
       g.rect(Math.round(s.x), Math.round(s.z), 1, 1).fill({ color: 0xa0d4f0, alpha: alpha * 0.5 });
+    }
+  }
+}
+
+// ── Dirt Puff (Hoe) ──────────────────────────────────────
+interface DirtPuff { x: number; z: number; vx: number; vz: number; life: number; size: number; color: number; }
+const dirtPuffs: DirtPuff[] = [];
+
+function spawnDirtPuff(tileX: number, tileZ: number): void {
+  const cx = tileX * TILE_PX + TILE_PX / 2;
+  const cz = tileZ * TILE_PX + TILE_PX / 2;
+  const colors = [0x8b7355, 0x6b5335, 0xa09070, 0x7a6345];
+  for (let i = 0; i < 6; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 6 + Math.random() * 12;
+    dirtPuffs.push({
+      x: cx + (Math.random() - 0.5) * 4,
+      z: cz + (Math.random() - 0.5) * 2,
+      vx: Math.cos(angle) * speed,
+      vz: Math.sin(angle) * speed * 0.6 - 4, // bias upward
+      life: 0,
+      size: 1 + Math.random(),
+      color: colors[Math.floor(Math.random() * colors.length)]!,
+    });
+  }
+}
+
+function updateDirtPuffs(dt: number): void {
+  for (let i = dirtPuffs.length - 1; i >= 0; i--) {
+    const p = dirtPuffs[i]!;
+    p.life += dt * 1.5;
+    p.x += p.vx * dt;
+    p.z += p.vz * dt;
+    p.vx *= 0.9;
+    p.vz *= 0.9;
+    if (p.life >= 1) dirtPuffs.splice(i, 1);
+  }
+}
+
+function drawDirtPuffs(g: Graphics): void {
+  for (const p of dirtPuffs) {
+    const alpha = (1 - p.life) * 0.6;
+    if (alpha <= 0) continue;
+    const sz = Math.max(1, Math.round(p.size * (1 + p.life * 0.5)));
+    g.rect(Math.round(p.x), Math.round(p.z), sz, sz).fill({ color: p.color, alpha });
+  }
+}
+
+// ── Seed Pop (Planting) ──────────────────────────────────
+interface SeedPop { x: number; z: number; vz: number; life: number; color: number; }
+const seedPops: SeedPop[] = [];
+
+function spawnSeedPop(tileX: number, tileZ: number): void {
+  const cx = tileX * TILE_PX + TILE_PX / 2;
+  const cz = tileZ * TILE_PX + TILE_PX / 2;
+  const colors = [0x7ecc5a, 0x5aba3e, 0xa0e878, 0xd4f0a0];
+  for (let i = 0; i < 4; i++) {
+    seedPops.push({
+      x: cx + (Math.random() - 0.5) * 6,
+      z: cz,
+      vz: -8 - Math.random() * 12,
+      life: 0,
+      color: colors[Math.floor(Math.random() * colors.length)]!,
+    });
+  }
+}
+
+function updateSeedPops(dt: number): void {
+  for (let i = seedPops.length - 1; i >= 0; i--) {
+    const p = seedPops[i]!;
+    p.life += dt * 2;
+    p.z += p.vz * dt;
+    p.vz += 30 * dt; // gravity
+    if (p.life >= 1) seedPops.splice(i, 1);
+  }
+}
+
+function drawSeedPops(g: Graphics): void {
+  for (const p of seedPops) {
+    const alpha = 1 - p.life;
+    if (alpha <= 0) continue;
+    g.rect(Math.round(p.x), Math.round(p.z), 1, 1).fill({ color: p.color, alpha: alpha * 0.8 });
+  }
+}
+
+// ── Harvest Burst ────────────────────────────────────────
+interface HarvestPart { x: number; z: number; vx: number; vz: number; life: number; color: number; }
+const harvestParts: HarvestPart[] = [];
+
+function spawnHarvestBurst(tileX: number, tileZ: number, cropType: string): void {
+  const cx = tileX * TILE_PX + TILE_PX / 2;
+  const cz = tileZ * TILE_PX + TILE_PX / 2;
+  const colorSets: Record<string, number[]> = {
+    sky_wheat: [0xf0d040, 0xd8b830, 0xf8e868, 0xc8a020],
+    star_berry: [0x9060c0, 0x7040a0, 0xb080e0, 0x6030a0],
+    cloud_pumpkin: [0xe88030, 0xc06020, 0xf0a050, 0xd07028],
+    moon_flower: [0x80b0f0, 0x6090d0, 0xa0d0ff, 0xf0f0ff],
+  };
+  const colors = colorSets[cropType] ?? [0xf0d040, 0xd8b830];
+  for (let i = 0; i < 10; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 10 + Math.random() * 20;
+    harvestParts.push({
+      x: cx + (Math.random() - 0.5) * 4,
+      z: cz + (Math.random() - 0.5) * 4,
+      vx: Math.cos(angle) * speed,
+      vz: Math.sin(angle) * speed * 0.6 - 8,
+      life: 0,
+      color: colors[Math.floor(Math.random() * colors.length)]!,
+    });
+  }
+}
+
+function updateHarvestParts(dt: number): void {
+  for (let i = harvestParts.length - 1; i >= 0; i--) {
+    const p = harvestParts[i]!;
+    p.life += dt * 1.2;
+    p.x += p.vx * dt;
+    p.z += p.vz * dt;
+    p.vz += 25 * dt; // gravity
+    p.vx *= 0.95;
+    if (p.life >= 1) harvestParts.splice(i, 1);
+  }
+}
+
+function drawHarvestParts(g: Graphics): void {
+  for (const p of harvestParts) {
+    const alpha = 1 - p.life;
+    if (alpha <= 0) continue;
+    g.rect(Math.round(p.x), Math.round(p.z), 2, 2).fill({ color: p.color, alpha: alpha * 0.9 });
+  }
+}
+
+// ── Wood Chips (Axe) ─────────────────────────────────────
+interface WoodChip { x: number; z: number; vx: number; vz: number; life: number; color: number; }
+const woodChips: WoodChip[] = [];
+
+function spawnWoodChips(tileX: number, tileZ: number): void {
+  const cx = tileX * TILE_PX + TILE_PX / 2;
+  const cz = tileZ * TILE_PX + TILE_PX / 2;
+  const colors = [0x8b6914, 0x6b4e0a, 0xa08030, 0xc4a050, 0x5a3a10];
+  for (let i = 0; i < 5; i++) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8; // bias upward
+    const speed = 12 + Math.random() * 18;
+    woodChips.push({
+      x: cx + (Math.random() - 0.5) * 6,
+      z: cz - 4,
+      vx: Math.cos(angle) * speed * (Math.random() > 0.5 ? 1 : -1),
+      vz: Math.sin(angle) * speed,
+      life: 0,
+      color: colors[Math.floor(Math.random() * colors.length)]!,
+    });
+  }
+}
+
+function updateWoodChips(dt: number): void {
+  for (let i = woodChips.length - 1; i >= 0; i--) {
+    const p = woodChips[i]!;
+    p.life += dt * 1.4;
+    p.x += p.vx * dt;
+    p.z += p.vz * dt;
+    p.vz += 35 * dt; // gravity
+    p.vx *= 0.95;
+    if (p.life >= 1) woodChips.splice(i, 1);
+  }
+}
+
+function drawWoodChips(g: Graphics): void {
+  for (const p of woodChips) {
+    const alpha = 1 - p.life;
+    if (alpha <= 0) continue;
+    g.rect(Math.round(p.x), Math.round(p.z), 2, 1).fill({ color: p.color, alpha: alpha * 0.8 });
+  }
+}
+
+// ── Crop Growth Sparkle (Dawn) ───────────────────────────
+interface Sparkle { x: number; z: number; life: number; }
+const sparkles: Sparkle[] = [];
+
+function spawnGrowthSparkles(tileX: number, tileZ: number): void {
+  const cx = tileX * TILE_PX + TILE_PX / 2;
+  const cz = tileZ * TILE_PX + TILE_PX / 2;
+  for (let i = 0; i < 3; i++) {
+    sparkles.push({
+      x: cx + (Math.random() - 0.5) * 8,
+      z: cz + (Math.random() - 0.5) * 8 - 4,
+      life: 0,
+    });
+  }
+}
+
+function updateSparkles(dt: number): void {
+  for (let i = sparkles.length - 1; i >= 0; i--) {
+    const s = sparkles[i]!;
+    s.life += dt * 1.8;
+    s.z -= dt * 6;
+    if (s.life >= 1) sparkles.splice(i, 1);
+  }
+}
+
+function drawSparkles(g: Graphics): void {
+  for (const s of sparkles) {
+    // Pulse in then out
+    const brightness = s.life < 0.3 ? s.life / 0.3 : 1 - (s.life - 0.3) / 0.7;
+    if (brightness <= 0) continue;
+    const sz = brightness > 0.5 ? 2 : 1;
+    g.rect(Math.round(s.x), Math.round(s.z), sz, sz).fill({ color: 0xf8f0a0, alpha: brightness * 0.9 });
+    // Cross sparkle at peak
+    if (brightness > 0.6) {
+      g.rect(Math.round(s.x) - 1, Math.round(s.z), 1, 1).fill({ color: 0xffffff, alpha: brightness * 0.5 });
+      g.rect(Math.round(s.x) + sz, Math.round(s.z), 1, 1).fill({ color: 0xffffff, alpha: brightness * 0.5 });
+      g.rect(Math.round(s.x), Math.round(s.z) - 1, 1, 1).fill({ color: 0xffffff, alpha: brightness * 0.4 });
     }
   }
 }
@@ -2293,6 +2509,11 @@ function renderWorld(): void {
   drawMapleLeaves(objectGfx);
   drawLeafParticles(objectGfx);
   drawSplashes(objectGfx);
+  drawDirtPuffs(objectGfx);
+  drawSeedPops(objectGfx);
+  drawHarvestParts(objectGfx);
+  drawWoodChips(objectGfx);
+  drawSparkles(objectGfx);
   for (const c of chickens) drawChicken(objectGfx, c);
   drawButterflies(objectGfx);
   drawMotes(objectGfx);
@@ -2331,7 +2552,9 @@ function updateClock(dt: number): void {
 function dawnTick(): void {
   for (const crop of crops) {
     if (crop.watered) {
+      const prev = crop.growth;
       crop.growth = Math.min(crop.growth + 1, CROP_DEFS[crop.type].growDays);
+      if (crop.growth > prev) spawnGrowthSparkles(crop.x, crop.z);
     }
     crop.watered = false;
   }
@@ -2374,6 +2597,7 @@ function useTool(): void {
           if (crop.growth >= CROP_DEFS[crop.type].growDays) {
             const price = CROP_DEFS[crop.type].sellPrice;
             coins += price;
+            spawnHarvestBurst(x, z, crop.type);
             crops.splice(cropIdx, 1);
             sfxHarvest();
             spawnFloatingText(x, z, "+" + price, 0xf0e060);
@@ -2386,6 +2610,7 @@ function useTool(): void {
       if (tile === "grass") {
         tiles[z]![x] = "farmland";
         sfxTill();
+        spawnDirtPuff(x, z);
       } else if (tile === "farmland") {
         const cropIdx = crops.findIndex((c) => c.x === x && c.z === z);
         if (cropIdx >= 0) {
@@ -2393,6 +2618,7 @@ function useTool(): void {
           if (crop.growth >= CROP_DEFS[crop.type].growDays) {
             const price = CROP_DEFS[crop.type].sellPrice;
             coins += price;
+            spawnHarvestBurst(x, z, crop.type);
             crops.splice(cropIdx, 1);
             sfxHarvest();
             spawnFloatingText(x, z, "+" + price, 0xf0e060);
@@ -2418,6 +2644,7 @@ function useTool(): void {
         if (!crops.some((c) => c.x === x && c.z === z)) {
           crops.push({ x, z, type: CROP_IDS[selectedSeed]!, growth: 0, watered: false });
           sfxPlant();
+          spawnSeedPop(x, z);
         }
       }
       break;
@@ -2430,6 +2657,7 @@ function useTool(): void {
         sfxChop();
         triggerChopSwing();
         triggerShake(2);
+        spawnWoodChips(x, z);
         if (tree.chopTime >= CHOP_HITS) {
           wood += 3;
           tree.regrowTimer = TREE_REGROW_SECONDS;
@@ -2448,6 +2676,7 @@ function useTool(): void {
         sfxChop();
         triggerChopSwing();
         triggerShake(2);
+        spawnWoodChips(x, z);
         if (mt.chopTime >= CHOP_HITS) {
           wood += 2;
           mt.regrowTimer = TREE_REGROW_SECONDS;
@@ -2829,6 +3058,11 @@ function gameLoop(ticker: Ticker): void {
   if (gameMode === "playing") {
     updateClock(dt);
     updateSplashes(dt);
+    updateDirtPuffs(dt);
+    updateSeedPops(dt);
+    updateHarvestParts(dt);
+    updateWoodChips(dt);
+    updateSparkles(dt);
     updateMotes(dt);
     updateTrees(dt);
     updateButterflies(dt);
