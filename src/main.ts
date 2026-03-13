@@ -589,38 +589,126 @@ function drawPondTile(g: Graphics, tx: number, tz: number): void {
   const px = tx * TILE_PX;
   const pz = tz * TILE_PX;
   const now = performance.now() / 1000;
+  const isEdge = (dx: number, dz: number) => !isPondTile(tx + dx, tz + dz);
+  const isInner = !isEdge(0,-1) && !isEdge(0,1) && !isEdge(-1,0) && !isEdge(1,0);
 
-  // Base water
-  g.rect(px, pz, TILE_PX, TILE_PX).fill(0x476f95);
+  // ── Depth gradient base ──
+  // Inner tiles darker, edge tiles lighter
+  const baseColor = isInner ? 0x3a5f82 : 0x476f95;
+  g.rect(px, pz, TILE_PX, TILE_PX).fill(baseColor);
 
-  // Animated ripples
-  const wave = Math.sin(now * 2 + tx * 1.5 + tz * 2) * 0.5 + 0.5;
-  g.rect(px + 2, pz + Math.round(wave * 4) + 2, 4, 1).fill({ color: 0x7593af, alpha: 0.4 });
-  g.rect(px + 8, pz + Math.round((1 - wave) * 5) + 6, 3, 1).fill({ color: 0xa3b7ca, alpha: 0.3 });
-
-  // Shimmer highlights
-  const shimmer = Math.sin(now * 3 + tx * 3 + tz) * 0.5 + 0.5;
-  if (shimmer > 0.6) {
-    g.rect(px + 4 + Math.round(shimmer * 4), pz + 3, 1, 1).fill({ color: 0xd1dbe4, alpha: shimmer * 0.5 });
+  // Subtle depth darkening toward center-bottom
+  if (isInner) {
+    g.rect(px, pz + 8, TILE_PX, 8).fill({ color: 0x194a7a, alpha: 0.12 });
   }
 
-  // Darker edge against grass
-  const isEdge = (dx: number, dz: number) => !isPondTile(tx + dx, tz + dz);
-  if (isEdge(0, -1)) g.rect(px, pz, TILE_PX, 2).fill({ color: 0x194a7a, alpha: 0.4 });
-  if (isEdge(0, 1)) g.rect(px, pz + 14, TILE_PX, 2).fill({ color: 0x194a7a, alpha: 0.3 });
-  if (isEdge(-1, 0)) g.rect(px, pz, 2, TILE_PX).fill({ color: 0x194a7a, alpha: 0.3 });
-  if (isEdge(1, 0)) g.rect(px + 14, pz, 2, TILE_PX).fill({ color: 0x194a7a, alpha: 0.3 });
+  // ── Wave layers (3 overlapping sine waves) ──
+  const w1 = Math.sin(now * 1.6 + tx * 1.8 + tz * 2.2) * 0.5 + 0.5;
+  const w2 = Math.sin(now * 2.3 + tx * 2.5 + tz * 1.3) * 0.5 + 0.5;
+  const w3 = Math.sin(now * 1.1 + tx * 0.8 + tz * 3.1) * 0.5 + 0.5;
 
-  // Lily pad (only on a couple tiles)
-  if ((tx === 4 && tz === 20) || (tx === 5 && tz === 21)) {
-    const lilyX = px + 5 + Math.round(Math.sin(now * 0.5 + tx) * 1.5);
-    const lilyZ = pz + 6;
-    g.ellipse(lilyX + 2, lilyZ + 1, 3, 2).fill({ color: 0x4aaa3e, alpha: 0.7 });
-    g.rect(lilyX + 2, lilyZ, 1, 1).fill({ color: 0x5acc4e, alpha: 0.6 });
-    // Tiny flower on lily
-    if (tx === 4) {
-      g.rect(lilyX + 2, lilyZ - 1, 1, 1).fill({ color: 0xf0a0c0, alpha: 0.7 });
+  // Primary wave — long horizontal ripple
+  g.rect(px + 1, pz + Math.round(w1 * 6) + 2, 6, 1).fill({ color: 0x7593af, alpha: 0.35 });
+  // Secondary wave — shorter, offset
+  g.rect(px + 7, pz + Math.round(w2 * 5) + 5, 4, 1).fill({ color: 0x7593af, alpha: 0.25 });
+  // Tertiary — subtle fill movement
+  g.rect(px + 3, pz + Math.round(w3 * 8) + 1, 3, 1).fill({ color: 0xa3b7ca, alpha: 0.18 });
+
+  // ── Light caustics ──
+  // Dappled light pattern that shifts
+  const cx1 = Math.round(Math.sin(now * 0.7 + tx * 4) * 4 + 7);
+  const cz1 = Math.round(Math.cos(now * 0.9 + tz * 3) * 3 + 5);
+  const cx2 = Math.round(Math.sin(now * 1.1 + tx * 2 + 5) * 5 + 5);
+  const cz2 = Math.round(Math.cos(now * 0.6 + tz * 4 + 2) * 4 + 10);
+  const causticA = (Math.sin(now * 1.5 + tx + tz) * 0.5 + 0.5) * 0.25;
+  g.rect(px + cx1, pz + cz1, 2, 1).fill({ color: 0xa3b7ca, alpha: causticA });
+  g.rect(px + cx2, pz + cz2, 1, 2).fill({ color: 0xd1dbe4, alpha: causticA * 0.7 });
+
+  // ── Shimmer sparkles (multiple) ──
+  for (let i = 0; i < 3; i++) {
+    const phase = now * (2.5 + i * 0.7) + tx * (3 + i) + tz * (2 - i);
+    const sparkle = Math.sin(phase) * 0.5 + 0.5;
+    if (sparkle > 0.75) {
+      const sx = Math.round(Math.sin(phase * 0.3 + i * 5) * 5 + 7);
+      const sz = Math.round(Math.cos(phase * 0.4 + i * 3) * 4 + 7);
+      const bright = (sparkle - 0.75) * 4; // 0→1
+      g.rect(px + sx, pz + sz, 1, 1).fill({ color: 0xd1dbe4, alpha: bright * 0.6 });
+      // Cross flash at peak
+      if (bright > 0.7) {
+        g.rect(px + sx - 1, pz + sz, 1, 1).fill({ color: 0xfefefe, alpha: bright * 0.3 });
+        g.rect(px + sx + 1, pz + sz, 1, 1).fill({ color: 0xfefefe, alpha: bright * 0.3 });
+      }
     }
+  }
+
+  // ── Shore edges ──
+  // Light foam/froth where water meets grass
+  if (isEdge(0, -1)) {
+    g.rect(px, pz, TILE_PX, 1).fill({ color: 0xa3b7ca, alpha: 0.5 });
+    g.rect(px, pz + 1, TILE_PX, 1).fill({ color: 0x194a7a, alpha: 0.25 });
+    // Animated foam dots
+    const foam = Math.sin(now * 2 + tx * 4) * 0.5 + 0.5;
+    g.rect(px + Math.round(foam * 10) + 2, pz, 2, 1).fill({ color: 0xd1dbe4, alpha: 0.4 });
+  }
+  if (isEdge(0, 1)) {
+    g.rect(px, pz + 14, TILE_PX, 2).fill({ color: 0x194a7a, alpha: 0.2 });
+    g.rect(px, pz + 15, TILE_PX, 1).fill({ color: 0xa3b7ca, alpha: 0.3 });
+  }
+  if (isEdge(-1, 0)) {
+    g.rect(px, pz, 1, TILE_PX).fill({ color: 0xa3b7ca, alpha: 0.35 });
+    g.rect(px + 1, pz, 1, TILE_PX).fill({ color: 0x194a7a, alpha: 0.2 });
+  }
+  if (isEdge(1, 0)) {
+    g.rect(px + 15, pz, 1, TILE_PX).fill({ color: 0xa3b7ca, alpha: 0.3 });
+    g.rect(px + 14, pz, 1, TILE_PX).fill({ color: 0x194a7a, alpha: 0.15 });
+  }
+  // Diagonal corners — darken where two edges meet
+  if (isEdge(0, -1) && isEdge(-1, 0)) g.rect(px, pz, 2, 2).fill({ color: 0xa3b7ca, alpha: 0.5 });
+  if (isEdge(0, -1) && isEdge(1, 0)) g.rect(px + 14, pz, 2, 2).fill({ color: 0xa3b7ca, alpha: 0.5 });
+
+  // ── Fish shadow (only on inner tiles, subtle dark shape) ──
+  if (isInner) {
+    const fishPhase = now * 0.4 + tx * 7 + tz * 11;
+    const fishX = Math.round(Math.sin(fishPhase) * 5 + 7);
+    const fishZ = Math.round(Math.cos(fishPhase * 0.7) * 4 + 8);
+    const fishVisible = Math.sin(fishPhase * 0.2) * 0.5 + 0.5;
+    if (fishVisible > 0.6) {
+      const fa = (fishVisible - 0.6) * 2.5 * 0.12;
+      // Tiny fish silhouette — 3px body + 1px tail
+      const dir = Math.cos(fishPhase) > 0 ? 1 : -1;
+      g.rect(px + fishX, pz + fishZ, 3, 1).fill({ color: 0x194a7a, alpha: fa });
+      g.rect(px + fishX - dir * 2, pz + fishZ, 1, 1).fill({ color: 0x194a7a, alpha: fa * 0.7 });
+    }
+  }
+
+  // ── Lily pads ──
+  if ((tx === 4 && tz === 20) || (tx === 5 && tz === 21)) {
+    const bob = Math.sin(now * 0.8 + tx * 2) * 0.5;
+    const sway = Math.round(Math.sin(now * 0.5 + tx) * 1.5);
+    const lilyX = px + 5 + sway;
+    const lilyZ = pz + 6 + Math.round(bob);
+    // Shadow on water under pad
+    g.ellipse(lilyX + 2, lilyZ + 2, 3, 2).fill({ color: 0x194a7a, alpha: 0.15 });
+    // Pad
+    g.ellipse(lilyX + 2, lilyZ + 1, 3, 2).fill({ color: 0x3a9a30, alpha: 0.75 });
+    g.rect(lilyX + 1, lilyZ, 2, 1).fill({ color: 0x50b840, alpha: 0.6 });
+    // Vein line
+    g.rect(lilyX + 2, lilyZ, 1, 2).fill({ color: 0x2a7820, alpha: 0.3 });
+    // Flower on first pad
+    if (tx === 4) {
+      g.rect(lilyX + 2, lilyZ - 1, 1, 1).fill({ color: 0xf0a0c0, alpha: 0.8 });
+      g.rect(lilyX + 1, lilyZ - 1, 1, 1).fill({ color: 0xf8c8d8, alpha: 0.5 });
+    }
+  }
+
+  // ── Ambient ripple rings (occasional expanding circles) ──
+  const ringPhase = (now * 0.3 + tx * 5.7 + tz * 3.3) % 4; // repeats every ~4s
+  if (ringPhase < 1.2) {
+    const ringR = ringPhase * 4;
+    const ringA = (1 - ringPhase / 1.2) * 0.25;
+    const rcx = px + 8 + Math.round(Math.sin(tx * 7 + tz * 3) * 3);
+    const rcz = pz + 8 + Math.round(Math.cos(tx * 5 + tz * 7) * 3);
+    g.ellipse(rcx, rcz, Math.round(ringR) + 1, Math.max(1, Math.round(ringR * 0.5))).stroke({ color: 0xa3b7ca, alpha: ringA, width: 1 });
   }
 }
 
@@ -2889,8 +2977,8 @@ function updateSky(): void {
   const dayBot = 0xa3b7ca;
   const nightTop = 0x080e20;
   const nightBot = 0x101830;
-  const sunsetTop = 0xc86030;
-  const sunsetBot = 0xe8a060;
+  const sunsetTop = 0xf6416c;
+  const sunsetBot = 0xfff6b7;
 
   let topColor: number, botColor: number;
   if (hour >= 5 && hour < 18) {
