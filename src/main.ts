@@ -2,7 +2,7 @@ import { Application, Container, Graphics, Ticker } from "pixi.js";
 
 // ── Types ─────────────────────────────────────────────────
 type TileType = "grass" | "farmland";
-type CropTypeId = "sky_wheat";
+type CropTypeId = "sky_wheat" | "star_berry" | "cloud_pumpkin" | "moon_flower";
 type ToolId = "hoe" | "water" | "seeds" | "axe";
 
 interface CropState {
@@ -16,6 +16,8 @@ interface CropState {
 interface CropDefinition {
   label: string;
   growDays: number;
+  sellPrice: number;
+  icon: string;
 }
 
 // ── Constants ─────────────────────────────────────────────
@@ -41,8 +43,13 @@ const TOOLS: { id: ToolId; label: string; icon: string }[] = [
 ];
 
 const CROP_DEFS: Record<CropTypeId, CropDefinition> = {
-  sky_wheat: { label: "Sky Wheat", growDays: 3 },
+  sky_wheat: { label: "Sky Wheat", growDays: 3, sellPrice: 8, icon: "🌾" },
+  star_berry: { label: "Star Berry", growDays: 4, sellPrice: 15, icon: "⭐" },
+  cloud_pumpkin: { label: "Cloud Pumpkin", growDays: 5, sellPrice: 22, icon: "🎃" },
+  moon_flower: { label: "Moon Flower", growDays: 6, sellPrice: 30, icon: "🌙" },
 };
+const CROP_IDS: CropTypeId[] = ["sky_wheat", "star_berry", "cloud_pumpkin", "moon_flower"];
+let selectedSeed = 0;
 
 // ── Tile Colors (Stardew-inspired) ────────────────────────
 const COLORS = {
@@ -1127,64 +1134,167 @@ function drawCrop(g: Graphics, crop: CropState): void {
   const progress = crop.growth / def.growDays;
   const cx = crop.x * TILE_PX;
   const cz = crop.z * TILE_PX;
-  // Gentle sway
   const now = performance.now() / 1000;
   const swayAmt = progress < 0.3 ? 0.2 : progress < 0.7 ? 0.35 : 0.6;
   const sway = Math.sin(now * 1.8 + crop.x * 3 + crop.z * 7) * swayAmt;
   const sw = Math.round(sway);
 
+  // Generic seedling for all crops (stage 0)
   if (progress < 0.3) {
-    // Seedling — tiny sprout with gentle sway
     g.rect(cx + 7, cz + 11, 2, 3).fill(COLORS.cropGreenDark);
     g.rect(cx + 6 + sw, cz + 10, 4, 2).fill(COLORS.cropGreen);
     g.rect(cx + 7 + sw, cz + 9, 2, 1).fill(COLORS.cropGreenLight);
     g.rect(cx + 9 + sw, cz + 10, 1, 1).fill(COLORS.cropGreen);
-  } else if (progress < 0.7) {
-    // Growing — taller with leaves
-    g.rect(cx + 7, cz + 5, 2, 9).fill(COLORS.cropGreenDark);
-    g.rect(cx + 4 + sw, cz + 5, 3, 3).fill(COLORS.cropGreen);
-    g.rect(cx + 4 + sw, cz + 5, 2, 1).fill(COLORS.cropGreenLight);
-    g.rect(cx + 9 + sw, cz + 6, 3, 3).fill(COLORS.cropGreen);
-    g.rect(cx + 10 + sw, cz + 6, 2, 1).fill(COLORS.cropGreenLight);
-    g.rect(cx + 6, cz + 9, 4, 2).fill(COLORS.cropGreen);
-    g.rect(cx + 6, cz + 13, 4, 1).fill({ color: 0x000000, alpha: 0.1 });
-  } else if (progress < 1) {
-    // Tall — nearly ready, beginning to show wheat tips
-    g.rect(cx + 7 + sw, cz + 3, 2, 11).fill(COLORS.cropGreenDark);
-    g.rect(cx + 3 + sw, cz + 4, 4, 4).fill(COLORS.cropGreen);
-    g.rect(cx + 3 + sw, cz + 4, 3, 1).fill(COLORS.cropGreenLight);
-    g.rect(cx + 9 + sw, cz + 3, 4, 4).fill(COLORS.cropGreen);
-    g.rect(cx + 10 + sw, cz + 3, 3, 1).fill(COLORS.cropGreenLight);
-    g.rect(cx + 5 + sw, cz + 7, 6, 3).fill(COLORS.cropGreen);
-    // Early wheat buds
-    g.rect(cx + 5 + sw, cz + 2, 2, 2).fill(COLORS.cropBrown);
-    g.rect(cx + 10 + sw, cz + 1, 2, 2).fill(COLORS.cropBrown);
-    g.rect(cx + 6 + sw, cz + 13, 4, 1).fill({ color: 0x000000, alpha: 0.1 });
   } else {
-    // Harvestable — golden wheat with full detail
-    g.rect(cx + 7 + sw, cz + 3, 2, 11).fill(COLORS.cropGreenDark);
-    g.rect(cx + 3 + sw, cz + 5, 4, 3).fill(COLORS.cropGreen);
-    g.rect(cx + 3 + sw, cz + 5, 3, 1).fill(COLORS.cropGreenLight);
-    g.rect(cx + 9 + sw, cz + 4, 4, 3).fill(COLORS.cropGreen);
-    g.rect(cx + 10 + sw, cz + 4, 3, 1).fill(COLORS.cropGreenLight);
-    g.rect(cx + 5 + sw, cz + 7, 6, 3).fill(COLORS.cropGreen);
-    // Golden wheat heads
-    g.rect(cx + 4 + sw, cz + 2, 4, 3).fill(COLORS.cropYellow);
-    g.rect(cx + 5 + sw, cz + 1, 2, 1).fill(COLORS.cropYellowLight);
-    g.rect(cx + 4 + sw, cz + 4, 1, 1).fill(0xc4b030); // shadow
-    g.rect(cx + 9 + sw, cz + 1, 4, 3).fill(COLORS.cropYellow);
-    g.rect(cx + 10 + sw, cz + 0, 2, 1).fill(COLORS.cropYellowLight);
-    g.rect(cx + 9 + sw, cz + 3, 1, 1).fill(0xc4b030);
-    // Wheat whiskers
-    g.rect(cx + 4 + sw, cz + 1, 1, 1).fill({ color: COLORS.cropYellow, alpha: 0.6 });
-    g.rect(cx + 13 + sw, cz + 0, 1, 1).fill({ color: COLORS.cropYellow, alpha: 0.6 });
-    // Ground shadow
-    g.rect(cx + 5, cz + 13, 6, 1).fill({ color: 0x000000, alpha: 0.12 });
+    switch (crop.type) {
+      case "sky_wheat": drawWheat(g, cx, cz, sw, progress); break;
+      case "star_berry": drawStarBerry(g, cx, cz, sw, progress, now); break;
+      case "cloud_pumpkin": drawPumpkin(g, cx, cz, sw, progress); break;
+      case "moon_flower": drawMoonFlower(g, cx, cz, sw, progress, now); break;
+    }
   }
 
   if (crop.watered) {
     g.rect(cx + 13, cz + 1, 2, 2).fill({ color: COLORS.water, alpha: 0.6 });
     g.rect(cx + 14, cz + 1, 1, 1).fill({ color: 0xa0d4f0, alpha: 0.4 });
+  }
+}
+
+function drawWheat(g: Graphics, cx: number, cz: number, sw: number, progress: number): void {
+  if (progress < 0.7) {
+    g.rect(cx + 7, cz + 5, 2, 9).fill(COLORS.cropGreenDark);
+    g.rect(cx + 4 + sw, cz + 5, 3, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 4 + sw, cz + 5, 2, 1).fill(COLORS.cropGreenLight);
+    g.rect(cx + 9 + sw, cz + 6, 3, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 10 + sw, cz + 6, 2, 1).fill(COLORS.cropGreenLight);
+    g.rect(cx + 6, cz + 13, 4, 1).fill({ color: 0x000000, alpha: 0.1 });
+  } else if (progress < 1) {
+    g.rect(cx + 7 + sw, cz + 3, 2, 11).fill(COLORS.cropGreenDark);
+    g.rect(cx + 3 + sw, cz + 4, 4, 4).fill(COLORS.cropGreen);
+    g.rect(cx + 9 + sw, cz + 3, 4, 4).fill(COLORS.cropGreen);
+    g.rect(cx + 5 + sw, cz + 2, 2, 2).fill(COLORS.cropBrown);
+    g.rect(cx + 10 + sw, cz + 1, 2, 2).fill(COLORS.cropBrown);
+  } else {
+    g.rect(cx + 7 + sw, cz + 3, 2, 11).fill(COLORS.cropGreenDark);
+    g.rect(cx + 3 + sw, cz + 5, 4, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 9 + sw, cz + 4, 4, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 4 + sw, cz + 2, 4, 3).fill(COLORS.cropYellow);
+    g.rect(cx + 5 + sw, cz + 1, 2, 1).fill(COLORS.cropYellowLight);
+    g.rect(cx + 9 + sw, cz + 1, 4, 3).fill(COLORS.cropYellow);
+    g.rect(cx + 10 + sw, cz + 0, 2, 1).fill(COLORS.cropYellowLight);
+    g.rect(cx + 5, cz + 13, 6, 1).fill({ color: 0x000000, alpha: 0.12 });
+  }
+}
+
+function drawStarBerry(g: Graphics, cx: number, cz: number, sw: number, progress: number, now: number): void {
+  // Berry bush — round and bushy
+  if (progress < 0.7) {
+    // Small bush
+    g.rect(cx + 6, cz + 8, 4, 6).fill(COLORS.cropGreenDark);
+    g.rect(cx + 5 + sw, cz + 7, 6, 4).fill(COLORS.cropGreen);
+    g.rect(cx + 6 + sw, cz + 6, 4, 1).fill(COLORS.cropGreenLight);
+  } else if (progress < 1) {
+    // Bigger bush with unripe berries
+    g.rect(cx + 5, cz + 6, 6, 8).fill(COLORS.cropGreenDark);
+    g.rect(cx + 4 + sw, cz + 5, 8, 6).fill(COLORS.cropGreen);
+    g.rect(cx + 5 + sw, cz + 4, 6, 1).fill(COLORS.cropGreenLight);
+    // Green berries
+    g.rect(cx + 5 + sw, cz + 6, 2, 2).fill(0x88cc60);
+    g.rect(cx + 9 + sw, cz + 7, 2, 2).fill(0x88cc60);
+  } else {
+    // Full bush with ripe star berries (purple/blue)
+    g.rect(cx + 5, cz + 6, 6, 8).fill(COLORS.cropGreenDark);
+    g.rect(cx + 4 + sw, cz + 5, 8, 6).fill(COLORS.cropGreen);
+    g.rect(cx + 5 + sw, cz + 4, 6, 1).fill(COLORS.cropGreenLight);
+    // Ripe berries — glowing purple-blue
+    const glow = Math.sin(now * 3) * 0.15 + 0.85;
+    g.rect(cx + 4 + sw, cz + 5, 3, 3).fill({ color: 0x8060d0, alpha: glow });
+    g.rect(cx + 5 + sw, cz + 5, 1, 1).fill({ color: 0xc0a0f0, alpha: glow * 0.6 });
+    g.rect(cx + 9 + sw, cz + 6, 3, 3).fill({ color: 0x8060d0, alpha: glow });
+    g.rect(cx + 10 + sw, cz + 6, 1, 1).fill({ color: 0xc0a0f0, alpha: glow * 0.6 });
+    g.rect(cx + 6 + sw, cz + 8, 2, 2).fill({ color: 0x7050c0, alpha: glow });
+    // Star sparkle
+    if (Math.sin(now * 5) > 0.5) {
+      g.rect(cx + 5 + sw, cz + 4, 1, 1).fill({ color: 0xffffff, alpha: 0.7 });
+    }
+    g.rect(cx + 5, cz + 13, 6, 1).fill({ color: 0x000000, alpha: 0.1 });
+  }
+}
+
+function drawPumpkin(g: Graphics, cx: number, cz: number, sw: number, progress: number): void {
+  if (progress < 0.5) {
+    // Vine growing
+    g.rect(cx + 6, cz + 10, 4, 4).fill(COLORS.cropGreenDark);
+    g.rect(cx + 5 + sw, cz + 9, 6, 3).fill(COLORS.cropGreen);
+    // Small vine tendrils
+    g.rect(cx + 3 + sw, cz + 10, 2, 1).fill(COLORS.cropGreenDark);
+    g.rect(cx + 11 + sw, cz + 11, 2, 1).fill(COLORS.cropGreenDark);
+  } else if (progress < 1) {
+    // Growing pumpkin — small and green-orange
+    g.rect(cx + 4, cz + 8, 8, 6).fill(COLORS.cropGreen);
+    g.rect(cx + 3 + sw, cz + 7, 3, 2).fill(COLORS.cropGreenDark);
+    g.rect(cx + 10 + sw, cz + 8, 3, 2).fill(COLORS.cropGreenDark);
+    // Small pumpkin forming
+    g.rect(cx + 5, cz + 9, 6, 4).fill(0xc0882e);
+    g.rect(cx + 6, cz + 10, 4, 2).fill(0xd09838);
+    g.rect(cx + 7, cz + 9, 1, 1).fill(COLORS.cropGreenDark); // stem
+  } else {
+    // Big ripe pumpkin — orange, round, with leaves
+    // Leaves
+    g.rect(cx + 2 + sw, cz + 6, 4, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 10 + sw, cz + 5, 4, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 3 + sw, cz + 6, 2, 1).fill(COLORS.cropGreenLight);
+    // Pumpkin body — big round
+    g.rect(cx + 4, cz + 7, 8, 6).fill(0xd08830);
+    g.rect(cx + 3, cz + 8, 10, 4).fill(0xd08830);
+    // Ridges
+    g.rect(cx + 5, cz + 7, 1, 6).fill(0xc07820);
+    g.rect(cx + 8, cz + 7, 1, 6).fill(0xc07820);
+    g.rect(cx + 11, cz + 8, 1, 4).fill(0xc07820);
+    // Highlight
+    g.rect(cx + 6, cz + 8, 2, 2).fill({ color: 0xf0b040, alpha: 0.5 });
+    // Stem
+    g.rect(cx + 7, cz + 6, 2, 2).fill(0x5a3820);
+    g.rect(cx + 7, cz + 5, 1, 1).fill(COLORS.cropGreenDark);
+    // Shadow
+    g.rect(cx + 4, cz + 13, 8, 1).fill({ color: 0x000000, alpha: 0.12 });
+  }
+}
+
+function drawMoonFlower(g: Graphics, cx: number, cz: number, sw: number, progress: number, now: number): void {
+  if (progress < 0.5) {
+    // Tall thin stem growing
+    g.rect(cx + 7, cz + 6, 2, 8).fill(COLORS.cropGreenDark);
+    g.rect(cx + 5 + sw, cz + 7, 3, 2).fill(COLORS.cropGreen);
+    g.rect(cx + 9 + sw, cz + 8, 3, 2).fill(COLORS.cropGreen);
+  } else if (progress < 1) {
+    // Tall stem with bud
+    g.rect(cx + 7 + sw, cz + 3, 2, 11).fill(COLORS.cropGreenDark);
+    g.rect(cx + 4 + sw, cz + 6, 3, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 9 + sw, cz + 5, 3, 3).fill(COLORS.cropGreen);
+    // Closed bud — pale purple
+    g.rect(cx + 6 + sw, cz + 2, 4, 3).fill(0x9888c0);
+    g.rect(cx + 7 + sw, cz + 1, 2, 1).fill(0xb0a0d0);
+  } else {
+    // Full bloom — glowing moon flower
+    const pulse = Math.sin(now * 2) * 0.1 + 0.9;
+    g.rect(cx + 7 + sw, cz + 4, 2, 10).fill(COLORS.cropGreenDark);
+    g.rect(cx + 4 + sw, cz + 7, 3, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 9 + sw, cz + 6, 3, 3).fill(COLORS.cropGreen);
+    // Petals — silvery white with soft glow
+    g.rect(cx + 5 + sw, cz + 1, 6, 5).fill({ color: 0xd0c8e8, alpha: pulse });
+    g.rect(cx + 4 + sw, cz + 2, 8, 3).fill({ color: 0xd0c8e8, alpha: pulse });
+    g.rect(cx + 6 + sw, cz + 0, 4, 1).fill({ color: 0xe8e0f8, alpha: pulse });
+    // Center — golden
+    g.rect(cx + 7 + sw, cz + 2, 2, 2).fill({ color: 0xf0e080, alpha: pulse });
+    g.rect(cx + 7 + sw, cz + 2, 1, 1).fill({ color: 0xfff8c0, alpha: pulse * 0.7 });
+    // Glow effect
+    g.rect(cx + 4 + sw, cz + 0, 8, 6).fill({ color: 0xe0d8f8, alpha: 0.08 * pulse });
+    // Sparkle
+    if (Math.sin(now * 4 + cx) > 0.7) {
+      g.rect(cx + 4 + sw, cz + 1, 1, 1).fill({ color: 0xffffff, alpha: 0.6 });
+    }
+    g.rect(cx + 6, cz + 13, 4, 1).fill({ color: 0x000000, alpha: 0.1 });
   }
 }
 
@@ -1576,8 +1686,8 @@ function useTool(): void {
         if (cropIdx >= 0) {
           const crop = crops[cropIdx]!;
           if (crop.growth >= CROP_DEFS[crop.type].growDays) {
+            coins += CROP_DEFS[crop.type].sellPrice;
             crops.splice(cropIdx, 1);
-            coins += 8;
           }
         } else {
           tiles[z]![x] = "grass";
@@ -1597,7 +1707,7 @@ function useTool(): void {
     case "seeds":
       if (tile === "farmland") {
         if (!crops.some((c) => c.x === x && c.z === z)) {
-          crops.push({ x, z, type: "sky_wheat", growth: 0, watered: false });
+          crops.push({ x, z, type: CROP_IDS[selectedSeed]!, growth: 0, watered: false });
         }
       }
       break;
@@ -1680,22 +1790,45 @@ function updateHud(): void {
 
     const iconSpan = document.createElement("div");
     iconSpan.className = "slot-icon";
-    iconSpan.textContent = tool.icon;
     iconSpan.style.fontSize = "18px";
     iconSpan.style.lineHeight = "1";
     iconSpan.style.padding = "2px 0";
-    div.appendChild(iconSpan);
 
     const nameSpan = document.createElement("div");
     nameSpan.className = "slot-name";
-    nameSpan.textContent = tool.label;
+
+    // Seeds slot shows current seed type
+    if (tool.id === "seeds") {
+      const seedDef = CROP_DEFS[CROP_IDS[selectedSeed]!];
+      iconSpan.textContent = seedDef.icon;
+      nameSpan.textContent = seedDef.label;
+    } else {
+      iconSpan.textContent = tool.icon;
+      nameSpan.textContent = tool.label;
+    }
+
+    div.appendChild(iconSpan);
     div.appendChild(nameSpan);
 
     const idx = i;
     div.addEventListener("click", () => {
+      if (idx === selectedTool && tool.id === "seeds") {
+        // Clicking seeds again cycles seed type
+        selectedSeed = (selectedSeed + 1) % CROP_IDS.length;
+      }
       selectedTool = idx;
       updateHud();
     });
+    // Right-click on seeds slot cycles seed type
+    if (tool.id === "seeds") {
+      div.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        selectedSeed = (selectedSeed + 1) % CROP_IDS.length;
+        selectedTool = idx;
+        updateHud();
+      });
+    }
 
     toolbarEl.appendChild(div);
   }
@@ -1713,6 +1846,7 @@ function saveGame(): void {
     coins,
     wood,
     selectedTool,
+    selectedSeed,
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
 }
@@ -1743,6 +1877,7 @@ function loadGame(): boolean {
       }
     }
     selectedTool = data.selectedTool ?? 0;
+    selectedSeed = data.selectedSeed ?? 0;
     return true;
   } catch {
     return false;
