@@ -1,10 +1,19 @@
 :root {
   color-scheme: only light;
-  --ink: #f8f4ff;
-  --muted: #d7d0ea;
-  --panel: rgba(22, 28, 42, 0.86);
-  --panel-strong: rgba(14, 18, 28, 0.94);
-  --accent: #a4d47a;
+  --ink: #1a1a2e;
+  --ink-light: #444466;
+  --muted: #8888aa;
+  --panel: #ece9d8;
+  --panel-strong: #d6d2c2;
+  --accent: #4a8c2a;
+  --xp-blue: #0054e3;
+  --xp-blue-light: #1c72f0;
+  --xp-blue-dark: #003daa;
+  --xp-green: #3c8c2a;
+  --xp-silver: #ece9d8;
+  --xp-border-light: #ffffff;
+  --xp-border-dark: #716f64;
+  --xp-border-darker: #404040;
 }
 
 * {
@@ -18,7 +27,7 @@ body {
   height: 100%;
   overflow: hidden;
   font-family: "Press Start 2P", monospace;
-  background: #6aaed8;
+  background: #245edb;
 }
 
 
@@ -26,18 +35,28 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  color: var(--ink);
-  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  text-shadow:
+    1px 1px 0 rgba(0, 0, 0, 0.6),
+    0 0 6px rgba(0, 80, 200, 0.3);
 }
 
 #top-bar {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 8px;
+  left: 8px;
   display: flex;
-  gap: 14px;
+  gap: 8px;
   font-size: 8px;
   letter-spacing: 0.02em;
+}
+
+#top-bar > span {
+  background: linear-gradient(180deg, var(--xp-blue-light), var(--xp-blue-dark));
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 #toolbar {
@@ -46,40 +65,57 @@ body {
   bottom: 16px;
   transform: translateX(-50%);
   display: flex;
-  gap: 6px;
+  gap: 2px;
   pointer-events: auto;
+  background: linear-gradient(180deg, #ece9d8, #d6d2c2);
+  padding: 4px;
+  border: 1px solid var(--xp-border-dark);
+  border-top-color: var(--xp-border-light);
+  border-left-color: var(--xp-border-light);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .hotbar-slot {
-  width: 60px;
-  min-height: 60px;
+  width: 56px;
+  min-height: 56px;
   padding: 4px;
-  border: 2px solid rgba(20, 20, 20, 0.9);
-  outline: 1px solid rgba(210, 210, 210, 0.24);
-  background: linear-gradient(180deg, rgba(44, 53, 72, 0.82), rgba(24, 31, 45, 0.86));
+  border: 1px solid var(--xp-border-dark);
+  border-top-color: var(--xp-border-light);
+  border-left-color: var(--xp-border-light);
+  background: linear-gradient(180deg, #f4f1e8, #ddd8c8);
   text-align: center;
   font-size: 7px;
   line-height: 1.4;
   color: var(--ink);
-  transition: transform 0.1s ease, outline-color 0.15s ease;
+  border-radius: 2px;
+  transition: background 0.1s ease;
 }
 
 .hotbar-slot:hover {
-  transform: translateY(-2px);
-  outline-color: rgba(224, 234, 255, 0.5);
+  background: linear-gradient(180deg, #e8f0ff, #c8d8f0);
+  border-color: var(--xp-blue);
+  border-top-color: #8cb0e8;
+  border-left-color: #8cb0e8;
 }
 
 .hotbar-slot.active {
-  border-color: rgba(20, 20, 20, 0.95);
-  outline-color: rgba(191, 255, 176, 0.95);
-  background: linear-gradient(180deg, rgba(108, 138, 102, 0.92), rgba(67, 90, 62, 0.95));
-  box-shadow: 0 0 0 2px rgba(10, 10, 10, 0.5);
-  transform: translateY(-2px);
+  border: 2px solid var(--xp-blue);
+  background: linear-gradient(180deg, #c0d8f8, #88b0e0);
+  box-shadow: inset 0 1px 3px rgba(0, 40, 120, 0.3);
+  color: #000;
 }
 
 .slot-key {
-  opacity: 0.7;
+  opacity: 0.5;
   font-size: 6px;
+  color: var(--ink-light);
+}
+
+.hotbar-slot.active .slot-key {
+  color: #002060;
 }
 
 .slot-name {
@@ -89,7 +125,7 @@ body {
 
 #day-clock {
   position: absolute;
-  bottom: 92px;
+  bottom: 88px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -97,7 +133,9 @@ body {
   gap: 8px;
   font-size: 7px;
   letter-spacing: 0.04em;
-  opacity: 0.85;
+  color: #ffffff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+  opacity: 0.9;
 }
 
 #day-clock .clock-icon {
@@ -107,17 +145,20 @@ body {
 
 #day-clock .clock-bar {
   width: 100px;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+  height: 6px;
+  background: linear-gradient(180deg, #888, #aaa);
+  border: 1px solid #555;
+  border-radius: 3px;
   overflow: hidden;
   position: relative;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 #day-clock .clock-fill {
   height: 100%;
   border-radius: 2px;
   transition: width 0.3s linear, background-color 0.5s ease;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.15);
 }
 
 #day-clock .clock-label {
@@ -126,39 +167,58 @@ body {
 
 #status-line {
   position: absolute;
-  bottom: 120px;
+  bottom: 116px;
   width: 100%;
   text-align: center;
   font-size: 7px;
-  opacity: 0.6;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
 }
 
+/* ── Panels (XP Window Style) ────────────────── */
 .panel {
   position: fixed;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
   width: min(400px, 90vw);
-  padding: 20px;
-  background: linear-gradient(180deg, var(--panel), var(--panel-strong));
-  border: 3px solid rgba(6, 8, 12, 0.95);
-  outline: 2px solid rgba(199, 214, 255, 0.24);
+  padding: 0;
+  background: var(--xp-silver);
+  border: 2px solid var(--xp-border-darker);
+  border-top-color: var(--xp-border-light);
+  border-left-color: var(--xp-border-light);
+  border-radius: 8px 8px 4px 4px;
   color: var(--ink);
-  box-shadow: 0 30px 82px rgba(2, 4, 10, 0.58);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
   text-align: center;
+  overflow: hidden;
+}
+
+.panel::before {
+  content: "";
+  display: block;
+  height: 28px;
+  background: linear-gradient(180deg, #0997ff, #0054e3 50%, #0040b8);
+  border-radius: 5px 5px 0 0;
+  border-bottom: 1px solid #003090;
 }
 
 .panel h1 {
-  margin: 0 0 12px;
+  margin: -24px 0 12px;
   font-weight: 700;
-  font-size: 16px;
+  font-size: 11px;
   letter-spacing: 0.02em;
+  color: #ffffff;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 1;
 }
 
 .panel p {
-  margin: 0 0 10px;
+  margin: 0 20px 10px;
   font-size: 8px;
   line-height: 1.6;
+  color: var(--ink);
 }
 
 .hint {
@@ -166,21 +226,55 @@ body {
   font-size: 7px;
 }
 
+/* ── Buttons (XP Style) ─────────────────────── */
 button {
-  border: 2px solid rgba(18, 22, 30, 1);
-  outline: 1px solid rgba(255, 255, 255, 0.24);
-  padding: 10px 20px;
+  border: 1px solid var(--xp-border-dark);
+  border-top-color: var(--xp-border-light);
+  border-left-color: var(--xp-border-light);
+  padding: 8px 20px;
   font-size: 8px;
   font-family: inherit;
   color: var(--ink);
-  background: linear-gradient(180deg, rgba(106, 136, 90, 0.78), rgba(66, 92, 58, 0.9));
+  background: linear-gradient(180deg, #f4f1e8, #ddd8c8, #c8c2b0);
+  border-radius: 3px;
   cursor: pointer;
-  transition: transform 0.12s ease, filter 0.15s ease;
+  transition: background 0.1s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  margin: 8px auto 16px;
 }
 
 button:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
+  background: linear-gradient(180deg, #e8f0ff, #c8d8f0, #a8b8d8);
+  border-color: var(--xp-blue);
+  border-top-color: #8cb0e8;
+  border-left-color: #8cb0e8;
+}
+
+button:active {
+  background: linear-gradient(180deg, #b0c0d8, #c8d8f0);
+  border-top-color: var(--xp-border-dark);
+  border-left-color: var(--xp-border-dark);
+  border-bottom-color: var(--xp-border-light);
+  border-right-color: var(--xp-border-light);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+#start-btn {
+  background: linear-gradient(180deg, #6ac04a, #3c8c2a, #2a6c1a);
+  color: #ffffff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+  border: 1px solid #1a4a10;
+  border-top-color: #8ce070;
+  border-left-color: #8ce070;
+  padding: 10px 28px;
+  font-size: 9px;
+}
+
+#start-btn:hover {
+  background: linear-gradient(180deg, #80d060, #4ca038, #3a8828);
+  border-color: #1a4a10;
+  border-top-color: #a0f080;
+  border-left-color: #a0f080;
 }
 
 #reset-btn {
@@ -189,16 +283,19 @@ button:hover {
   right: 16px;
   pointer-events: auto;
   font-size: 6px;
-  padding: 6px 12px;
-  opacity: 0.5;
-  background: linear-gradient(180deg, rgba(80, 40, 40, 0.7), rgba(50, 25, 25, 0.85));
-  border: 1px solid rgba(20, 20, 20, 0.9);
-  outline: 1px solid rgba(200, 200, 200, 0.15);
+  padding: 5px 10px;
+  margin: 0;
+  opacity: 0.6;
+  background: linear-gradient(180deg, #e8c8c8, #c0a0a0, #a88888);
+  border: 1px solid #806060;
+  border-top-color: #f0e0e0;
+  border-left-color: #f0e0e0;
+  color: #402020;
   transition: opacity 0.2s ease;
 }
 
 #reset-btn:hover {
-  opacity: 0.9;
+  opacity: 1;
 }
 
 #changelog-btn {
@@ -207,18 +304,19 @@ button:hover {
   right: 100px;
   pointer-events: auto;
   font-size: 6px;
-  padding: 6px 12px;
-  opacity: 0.5;
-  background: linear-gradient(180deg, rgba(60, 50, 30, 0.7), rgba(40, 30, 15, 0.85));
-  border: 1px solid rgba(20, 20, 20, 0.9);
-  outline: 1px solid rgba(200, 200, 200, 0.15);
+  padding: 5px 10px;
+  margin: 0;
+  opacity: 0.6;
+  background: linear-gradient(180deg, #f4f1e8, #ddd8c8, #c8c2b0);
+  color: var(--ink);
   transition: opacity 0.2s ease;
 }
 
 #changelog-btn:hover {
-  opacity: 0.9;
+  opacity: 1;
 }
 
+/* ── Changelog Panel ─────────────────────────── */
 #changelog-panel {
   max-height: 70vh;
   overflow-y: auto;
@@ -229,7 +327,7 @@ button:hover {
 
 #changelog-entries {
   text-align: left;
-  margin: 12px 0;
+  margin: 0 16px 12px;
   max-height: 50vh;
   overflow-y: auto;
 }
@@ -241,7 +339,7 @@ button:hover {
 .changelog-version h2 {
   font-size: 9px;
   margin: 0 0 4px;
-  color: var(--accent);
+  color: var(--xp-green);
 }
 
 .changelog-version .changelog-date {
@@ -267,25 +365,24 @@ button:hover {
   color: var(--muted);
 }
 
-/* ── CRT Effect ──────────────────────────────── */
+#changelog-close {
+  margin-bottom: 12px;
+}
+
+/* ── CRT Effect (lighter — LCD monitor feel) ── */
 #crt-overlay {
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 9999;
-  /* Very light scanlines + subtle dither checkerboard */
   background:
     repeating-linear-gradient(
       to bottom,
       transparent 0px,
-      transparent 2px,
-      rgba(0, 0, 0, 0.03) 2px,
-      rgba(0, 0, 0, 0.03) 4px
-    ),
-    repeating-conic-gradient(
-      rgba(0, 0, 0, 0.015) 0% 25%,
-      transparent 0% 50%
-    ) 0 0 / 4px 4px;
+      transparent 3px,
+      rgba(0, 0, 0, 0.018) 3px,
+      rgba(0, 0, 0, 0.018) 6px
+    );
 }
 
 #crt-overlay::after {
@@ -294,17 +391,15 @@ button:hover {
   inset: 0;
   background: radial-gradient(
     ellipse at center,
-    transparent 60%,
-    rgba(0, 0, 0, 0.15) 100%
+    transparent 65%,
+    rgba(0, 0, 0, 0.08) 100%
   );
 }
 
-/* Very slight barrel curvature on the game area */
 #game-container {
   width: 100%;
   height: 100%;
   display: block;
-  border-radius: 8px;
   overflow: hidden;
 }
 
@@ -315,19 +410,18 @@ body {
 #game-container canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  transform: perspective(1800px) rotateX(0.3deg) rotateY(0deg) scale(1.005);
 }
 
-/* ── Boot Screen ─────────────────────────────── */
+/* ── Boot Screen (DOS/BIOS style) ────────────── */
 #boot-screen {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: #0a0a0a;
+  background: #000080;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.6s ease;
+  transition: opacity 0.4s ease;
 }
 
 #boot-screen.fade-out {
@@ -341,11 +435,11 @@ body {
 #boot-text {
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
-  color: #60a040;
+  color: #c0c0c0;
   text-align: left;
   line-height: 2.2;
   white-space: pre-line;
-  text-shadow: 0 0 8px rgba(96, 160, 64, 0.3);
+  text-shadow: none;
 }
 
 .hidden {

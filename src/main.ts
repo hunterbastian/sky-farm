@@ -202,15 +202,15 @@ let selectedSeed = 0;
 
 // ── Tile Colors (Stardew-inspired) ────────────────────────
 const COLORS = {
-  grass1: 0x5daa3e,
-  grass2: 0x4e9636,
-  grass3: 0x6ebc4e,
-  grass4: 0x68b845,
-  grass5: 0x58a038,
-  grassDark: 0x3e7e2c,
-  grassLight: 0x7ecc5a,
-  grassHighlight: 0x90d86a,
-  grassEdge: 0x3a6e24,
+  grass1: 0x5cc840,
+  grass2: 0x4db838,
+  grass3: 0x6ed850,
+  grass4: 0x68d248,
+  grass5: 0x56c03a,
+  grassDark: 0x3e9a2c,
+  grassLight: 0x80e060,
+  grassHighlight: 0x98f070,
+  grassEdge: 0x3a8824,
   cliffTop: 0x4a6a3e,
   cliffMid: 0x364a30,
   cliffFace: 0x2a3828,
@@ -2867,14 +2867,14 @@ interface SkyCloud {
   x: number; y: number; w: number; h: number; speed: number; alpha: number;
 }
 const skyClouds: SkyCloud[] = [];
-for (let i = 0; i < 12; i++) {
+for (let i = 0; i < 14; i++) {
   skyClouds.push({
     x: Math.random() * 2000 - 500,
     y: Math.random() * 800,
-    w: 40 + Math.random() * 80,
-    h: 8 + Math.random() * 12,
-    speed: 4 + Math.random() * 8,
-    alpha: 0.15 + Math.random() * 0.2,
+    w: 60 + Math.random() * 120,
+    h: 12 + Math.random() * 18,
+    speed: 3 + Math.random() * 6,
+    alpha: 0.35 + Math.random() * 0.3,
   });
 }
 
@@ -2884,13 +2884,13 @@ function updateSky(): void {
   const sh = app.screen.height;
   const hour = (clockTime / 3600) % 24;
 
-  // Sky gradient — changes with time of day
-  const dayTop = 0x6aaed8;
-  const dayBot = 0xb8d8f0;
-  const nightTop = 0x0a1628;
-  const nightBot = 0x142040;
-  const sunsetTop = 0xd08848;
-  const sunsetBot = 0xe8c080;
+  // Sky gradient — Bliss wallpaper vibes
+  const dayTop = 0x245edb;
+  const dayBot = 0x72b4e8;
+  const nightTop = 0x080e20;
+  const nightBot = 0x101830;
+  const sunsetTop = 0xc86030;
+  const sunsetBot = 0xe8a060;
 
   let topColor: number, botColor: number;
   if (hour >= 5 && hour < 18) {
@@ -2927,10 +2927,11 @@ function updateSky(): void {
     cloud.x += cloud.speed * (1 / 60);
     if (cloud.x > sw + 100) { cloud.x = -cloud.w - 50; cloud.y = Math.random() * sh; }
     const a = cloud.alpha * cloudAlphaMul;
-    // Fluffy cloud shape — overlapping ellipses
-    skyGfx.ellipse(cloud.x, cloud.y, cloud.w * 0.5, cloud.h).fill({ color: 0xffffff, alpha: a * 0.5 });
-    skyGfx.ellipse(cloud.x - cloud.w * 0.2, cloud.y + 2, cloud.w * 0.35, cloud.h * 0.8).fill({ color: 0xffffff, alpha: a * 0.4 });
-    skyGfx.ellipse(cloud.x + cloud.w * 0.25, cloud.y + 1, cloud.w * 0.4, cloud.h * 0.9).fill({ color: 0xffffff, alpha: a * 0.45 });
+    // Puffy cumulus clouds — Bliss style
+    skyGfx.ellipse(cloud.x, cloud.y, cloud.w * 0.5, cloud.h).fill({ color: 0xffffff, alpha: a * 0.7 });
+    skyGfx.ellipse(cloud.x - cloud.w * 0.22, cloud.y + 2, cloud.w * 0.38, cloud.h * 0.9).fill({ color: 0xffffff, alpha: a * 0.6 });
+    skyGfx.ellipse(cloud.x + cloud.w * 0.27, cloud.y + 1, cloud.w * 0.42, cloud.h * 0.95).fill({ color: 0xffffff, alpha: a * 0.65 });
+    skyGfx.ellipse(cloud.x - cloud.w * 0.08, cloud.y - cloud.h * 0.4, cloud.w * 0.3, cloud.h * 0.7).fill({ color: 0xffffff, alpha: a * 0.55 });
   }
 }
 
@@ -3107,17 +3108,18 @@ async function runBootSequence(): Promise<void> {
   const bootText = document.getElementById("boot-text")!;
 
   const lines = [
-    "SKY FARM OS v1.0",
-    "\u00a9 2026 Cloud Systems Inc.",
+    "SkyFarm BIOS v1.03",
+    "(C) 2003 Cloud Systems Inc.",
     "",
-    "Checking memory... 64KB OK",
-    "Loading pixel engine...",
-    "Initializing tile grid... 24x24",
-    "Spawning chickens... 4 found",
-    "Calibrating day/night cycle...",
-    "Planting wildflowers...",
+    "Detecting hardware... OK",
+    "Memory Test: 640K OK",
+    "Loading SkyFarm.exe...",
+    "Tile Grid: 24x24 initialized",
+    "Livestock: 4 chickens found",
+    "Day/Night cycle: calibrated",
+    "Wildflower seed: planted",
     "",
-    "Ready.",
+    "Starting Windows...",
   ];
 
   for (const line of lines) {
