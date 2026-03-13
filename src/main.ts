@@ -702,6 +702,8 @@ function drawWildflowers(g: Graphics): void {
 // ── Japanese Maple Trees ──────────────────────────────────
 interface MapleTree {
   x: number; z: number; variant: number;
+  chopTime: number; regrowTimer: number;
+  falling: boolean; fallAngle: number; fallDir: number;
 }
 
 interface MapleLeafParticle {
@@ -711,8 +713,8 @@ interface MapleLeafParticle {
 }
 
 const mapleTrees: MapleTree[] = [
-  { x: 3, z: 4, variant: 1 },
-  { x: 5, z: 16, variant: 2 },
+  { x: 3, z: 4, variant: 1, chopTime: 0, regrowTimer: 0, falling: false, fallAngle: 0, fallDir: 1 },
+  { x: 5, z: 16, variant: 2, chopTime: 0, regrowTimer: 0, falling: false, fallAngle: 0, fallDir: -1 },
 ];
 
 const mapleLeaves: MapleLeafParticle[] = [];
@@ -720,6 +722,7 @@ let mapleSpawnTimer = 0;
 
 function spawnMapleLeaves(): void {
   for (const tree of mapleTrees) {
+    if (tree.chopTime >= CHOP_HITS) continue;
     if (Math.random() > 0.4) continue;
     const cx = tree.x * TILE_PX + TILE_PX / 2;
     const cz = tree.z * TILE_PX - 6;
@@ -772,9 +775,46 @@ function drawMapleLeaves(g: Graphics): void {
   }
 }
 
-function drawMapleTree(g: Graphics, tree: MapleTree): void {
+function drawMapleStump(g: Graphics, tree: MapleTree): void {
+  if (tree.chopTime < CHOP_HITS) return;
   const cx = tree.x * TILE_PX + TILE_PX / 2;
   const cz = tree.z * TILE_PX + TILE_PX;
+  g.ellipse(cx, cz + 1, 3, 1).fill({ color: 0x000000, alpha: 0.08 });
+  g.rect(cx - 2, cz - 3, 5, 4).fill(0x3a2418);
+  g.rect(cx - 1, cz - 3, 3, 1).fill(0x5a4438);
+  g.rect(cx, cz - 3, 1, 1).fill(0x6a5448);
+}
+
+function drawMapleTree(g: Graphics, tree: MapleTree): void {
+  if (tree.chopTime >= CHOP_HITS && !tree.falling) return;
+  const cx = tree.x * TILE_PX + TILE_PX / 2;
+  const cz = tree.z * TILE_PX + TILE_PX;
+
+  if (tree.falling) {
+    const fallAlpha = Math.max(0, 1 - tree.fallAngle / (Math.PI / 2));
+    const cosA = Math.cos(tree.fallAngle * tree.fallDir);
+    const sinA = Math.sin(tree.fallAngle * tree.fallDir);
+    const rRect = (rx: number, rz: number, w: number, h: number, color: number) => {
+      for (let row = 0; row < h; row++) {
+        const dx1 = rx - cx, dx2 = rx + w - cx, dz = rz + row - cz;
+        g.rect(
+          Math.round(cx + dx1 * cosA - dz * sinA),
+          Math.round(cz + dx1 * sinA + dz * cosA),
+          Math.round((dx2 - dx1) * cosA) || 1,
+          Math.round((dx2 - dx1) * sinA) || 1
+        ).fill({ color, alpha: fallAlpha });
+      }
+    };
+    g.ellipse(cx, cz + 2, 9 * fallAlpha, 3 * fallAlpha).fill({ color: 0x000000, alpha: 0.10 * fallAlpha });
+    rRect(cx - 2, cz - 16, 4, 17, 0x3a2418);
+    rRect(cx - 8, cz - 22, 16, 6, 0xd87088);
+    rRect(cx - 9, cz - 20, 18, 4, 0xf0a0b0);
+    rRect(cx - 5, cz - 26, 10, 3, 0xf8c8d0);
+    rRect(cx - 3, cz - 28, 6, 2, 0xf8c8d0);
+    rRect(cx - 2, cz - 29, 4, 1, 0xf8e8f0);
+    return;
+  }
+
   const now = performance.now() / 1000;
   const sway = Math.sin(now * 0.8 + tree.variant * 3) * 0.4;
   const sw = Math.round(sway);
@@ -1950,7 +1990,6 @@ function updateTrees(dt: number): void {
   for (const tree of trees) {
     // Fall animation
     if (tree.falling) {
-      // Accelerating rotation (gravity feel)
       tree.fallAngle += dt * (1.5 + tree.fallAngle * 2.5);
       if (tree.fallAngle >= Math.PI / 2) {
         tree.fallAngle = 0;
@@ -1963,6 +2002,23 @@ function updateTrees(dt: number): void {
       if (tree.regrowTimer <= 0) {
         tree.chopTime = 0;
         tree.regrowTimer = 0;
+      }
+    }
+  }
+  // Maple / cherry blossom trees
+  for (const mt of mapleTrees) {
+    if (mt.falling) {
+      mt.fallAngle += dt * (1.5 + mt.fallAngle * 2.5);
+      if (mt.fallAngle >= Math.PI / 2) {
+        mt.fallAngle = 0;
+        mt.falling = false;
+      }
+    }
+    if (mt.chopTime >= CHOP_HITS && !mt.falling) {
+      mt.regrowTimer -= dt;
+      if (mt.regrowTimer <= 0) {
+        mt.chopTime = 0;
+        mt.regrowTimer = 0;
       }
     }
   }
@@ -2232,6 +2288,7 @@ function renderWorld(): void {
   for (const tree of trees) drawTreeStump(objectGfx, tree);
   for (const tree of trees) drawTree(objectGfx, tree);
   if (trees[HIVE_TREE]) drawHiveAndBees(objectGfx, trees[HIVE_TREE]!);
+  for (const mt of mapleTrees) drawMapleStump(objectGfx, mt);
   for (const mt of mapleTrees) drawMapleTree(objectGfx, mt);
   drawMapleLeaves(objectGfx);
   drawLeafParticles(objectGfx);
@@ -2366,6 +2423,7 @@ function useTool(): void {
       break;
 
     case "axe": {
+      // Oak trees
       const tree = trees.find((t) => t.x === x && t.z === z && t.chopTime < CHOP_HITS && !t.falling);
       if (tree) {
         tree.chopTime += 1;
@@ -2380,6 +2438,24 @@ function useTool(): void {
           sfxTreeFall();
           triggerShake(5);
           spawnFloatingText(x, z, "+3", 0xc4a050);
+        }
+        break;
+      }
+      // Cherry blossom trees
+      const mt = mapleTrees.find((t) => t.x === x && t.z === z && t.chopTime < CHOP_HITS && !t.falling);
+      if (mt) {
+        mt.chopTime += 1;
+        sfxChop();
+        triggerChopSwing();
+        triggerShake(2);
+        if (mt.chopTime >= CHOP_HITS) {
+          wood += 2;
+          mt.regrowTimer = TREE_REGROW_SECONDS;
+          mt.falling = true;
+          mt.fallAngle = 0;
+          sfxTreeFall();
+          triggerShake(4);
+          spawnFloatingText(x, z, "+2", 0xf0a0b0);
         }
       }
       break;
@@ -2478,6 +2554,7 @@ function saveGame(): void {
     tiles: tiles.map((row) => [...row]),
     crops: crops.map((c) => ({ ...c })),
     trees: trees.map((t) => ({ ...t })),
+    mapleTrees: mapleTrees.map((t) => ({ x: t.x, z: t.z, variant: t.variant, chopTime: t.chopTime, regrowTimer: t.regrowTimer })),
     coins,
     wood,
     selectedTool,
@@ -2511,6 +2588,12 @@ function loadGame(): boolean {
         trees[i]!.regrowTimer = data.trees[i].regrowTimer ?? 0;
       }
     }
+    if (data.mapleTrees) {
+      for (let i = 0; i < mapleTrees.length && i < data.mapleTrees.length; i++) {
+        mapleTrees[i]!.chopTime = data.mapleTrees[i].chopTime ?? 0;
+        mapleTrees[i]!.regrowTimer = data.mapleTrees[i].regrowTimer ?? 0;
+      }
+    }
     selectedTool = data.selectedTool ?? 0;
     selectedSeed = data.selectedSeed ?? 0;
     return true;
@@ -2536,6 +2619,14 @@ function resetFarm(): void {
   for (const tree of trees) {
     tree.chopTime = 0;
     tree.regrowTimer = 0;
+    tree.falling = false;
+    tree.fallAngle = 0;
+  }
+  for (const mt of mapleTrees) {
+    mt.chopTime = 0;
+    mt.regrowTimer = 0;
+    mt.falling = false;
+    mt.fallAngle = 0;
   }
   updateHud();
 }
