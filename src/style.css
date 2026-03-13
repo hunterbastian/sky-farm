@@ -3,17 +3,17 @@
   --ink: #1a1a2e;
   --ink-light: #444466;
   --muted: #8888aa;
-  --panel: #ece9d8;
-  --panel-strong: #d6d2c2;
+  --panel: #f9f6f2;
+  --panel-strong: #e1dbd6;
   --accent: #4a8c2a;
   --xp-blue: #0054e3;
   --xp-blue-light: #1c72f0;
   --xp-blue-dark: #003daa;
   --xp-green: #3c8c2a;
-  --xp-silver: #ece9d8;
-  --xp-border-light: #ffffff;
-  --xp-border-dark: #716f64;
-  --xp-border-darker: #404040;
+  --xp-silver: #f9f6f2;
+  --xp-border-light: #fefefe;
+  --xp-border-dark: #d1d1d3;
+  --xp-border-darker: #a0a0a4;
 }
 
 * {
@@ -67,15 +67,15 @@ body {
   display: flex;
   gap: 2px;
   pointer-events: auto;
-  background: linear-gradient(180deg, #ece9d8, #d6d2c2);
+  background: linear-gradient(180deg, #f9f6f2, #e1dbd6);
   padding: 4px;
   border: 1px solid var(--xp-border-dark);
   border-top-color: var(--xp-border-light);
   border-left-color: var(--xp-border-light);
   border-radius: 3px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 2px 8px rgba(0, 0, 0, 0.25);
+    inset 0 1px 0 rgba(254, 254, 254, 0.8),
+    0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .hotbar-slot {
@@ -85,7 +85,7 @@ body {
   border: 1px solid var(--xp-border-dark);
   border-top-color: var(--xp-border-light);
   border-left-color: var(--xp-border-light);
-  background: linear-gradient(180deg, #f4f1e8, #ddd8c8);
+  background: linear-gradient(180deg, #fefefe, #e2e2e4);
   text-align: center;
   font-size: 7px;
   line-height: 1.4;
@@ -235,11 +235,11 @@ button {
   font-size: 8px;
   font-family: inherit;
   color: var(--ink);
-  background: linear-gradient(180deg, #f4f1e8, #ddd8c8, #c8c2b0);
+  background: linear-gradient(180deg, #fefefe, #e2e2e4, #d1d1d3);
   border-radius: 3px;
   cursor: pointer;
   transition: background 0.1s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
   margin: 8px auto 16px;
 }
 
@@ -286,11 +286,11 @@ button:active {
   padding: 5px 10px;
   margin: 0;
   opacity: 0.6;
-  background: linear-gradient(180deg, #e8c8c8, #c0a0a0, #a88888);
-  border: 1px solid #806060;
-  border-top-color: #f0e0e0;
-  border-left-color: #f0e0e0;
-  color: #402020;
+  background: linear-gradient(180deg, #f9f6f2, #e1dbd6, #d1d1d3);
+  border: 1px solid #b0a8a0;
+  border-top-color: #fefefe;
+  border-left-color: #fefefe;
+  color: #604040;
   transition: opacity 0.2s ease;
 }
 
@@ -307,7 +307,7 @@ button:active {
   padding: 5px 10px;
   margin: 0;
   opacity: 0.6;
-  background: linear-gradient(180deg, #f4f1e8, #ddd8c8, #c8c2b0);
+  background: linear-gradient(180deg, #f9f6f2, #e2e2e4, #d1d1d3);
   color: var(--ink);
   transition: opacity 0.2s ease;
 }

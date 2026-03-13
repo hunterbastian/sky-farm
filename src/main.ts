@@ -2884,9 +2884,9 @@ function updateSky(): void {
   const sh = app.screen.height;
   const hour = (clockTime / 3600) % 24;
 
-  // Sky gradient — Bliss wallpaper vibes
+  // Sky gradient — Bliss wallpaper with warm horizon
   const dayTop = 0x245edb;
-  const dayBot = 0x72b4e8;
+  const dayBot = 0x8cc4e8;
   const nightTop = 0x080e20;
   const nightBot = 0x101830;
   const sunsetTop = 0xc86030;
@@ -2927,11 +2927,13 @@ function updateSky(): void {
     cloud.x += cloud.speed * (1 / 60);
     if (cloud.x > sw + 100) { cloud.x = -cloud.w - 50; cloud.y = Math.random() * sh; }
     const a = cloud.alpha * cloudAlphaMul;
-    // Puffy cumulus clouds — Bliss style
-    skyGfx.ellipse(cloud.x, cloud.y, cloud.w * 0.5, cloud.h).fill({ color: 0xffffff, alpha: a * 0.7 });
-    skyGfx.ellipse(cloud.x - cloud.w * 0.22, cloud.y + 2, cloud.w * 0.38, cloud.h * 0.9).fill({ color: 0xffffff, alpha: a * 0.6 });
-    skyGfx.ellipse(cloud.x + cloud.w * 0.27, cloud.y + 1, cloud.w * 0.42, cloud.h * 0.95).fill({ color: 0xffffff, alpha: a * 0.65 });
-    skyGfx.ellipse(cloud.x - cloud.w * 0.08, cloud.y - cloud.h * 0.4, cloud.w * 0.3, cloud.h * 0.7).fill({ color: 0xffffff, alpha: a * 0.55 });
+    // Puffy cumulus clouds — warm off-white palette
+    skyGfx.ellipse(cloud.x, cloud.y, cloud.w * 0.5, cloud.h).fill({ color: 0xf9f6f2, alpha: a * 0.7 });
+    skyGfx.ellipse(cloud.x - cloud.w * 0.22, cloud.y + 2, cloud.w * 0.38, cloud.h * 0.9).fill({ color: 0xe1dbd6, alpha: a * 0.6 });
+    skyGfx.ellipse(cloud.x + cloud.w * 0.27, cloud.y + 1, cloud.w * 0.42, cloud.h * 0.95).fill({ color: 0xe2e2e4, alpha: a * 0.65 });
+    skyGfx.ellipse(cloud.x - cloud.w * 0.08, cloud.y - cloud.h * 0.4, cloud.w * 0.3, cloud.h * 0.7).fill({ color: 0xfefefe, alpha: a * 0.55 });
+    // Warm shadow underside
+    skyGfx.ellipse(cloud.x, cloud.y + cloud.h * 0.3, cloud.w * 0.45, cloud.h * 0.5).fill({ color: 0xd1d1d3, alpha: a * 0.3 });
   }
 }
 
