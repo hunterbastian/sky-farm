@@ -572,6 +572,7 @@ const hudTime = el<HTMLSpanElement>("hud-time");
 const hudCoins = el<HTMLSpanElement>("hud-coins");
 const toolbarEl = el<HTMLDivElement>("toolbar");
 const startBtn = el<HTMLButtonElement>("start-btn");
+const resetBtn = el<HTMLButtonElement>("reset-btn");
 const dayClock = el<HTMLDivElement>("day-clock");
 const gameContainer = el<HTMLDivElement>("game-container");
 
@@ -1558,6 +1559,26 @@ function loadGame(): boolean {
   }
 }
 
+function resetFarm(): void {
+  localStorage.removeItem(SAVE_KEY);
+  clockTime = DAWN_SECONDS;
+  clockDay = 1;
+  coins = 0;
+  wood = 0;
+  selectedTool = 0;
+  crops.length = 0;
+  for (let z = 0; z < ISLAND_SIZE; z++) {
+    for (let x = 0; x < ISLAND_SIZE; x++) {
+      tiles[z]![x] = "grass";
+    }
+  }
+  for (const tree of trees) {
+    tree.chopTime = 0;
+    tree.regrowTimer = 0;
+  }
+  updateHud();
+}
+
 // ── Day/Night Lighting ────────────────────────────────────
 const nightOverlay = new Graphics();
 
@@ -1665,6 +1686,10 @@ function setupInput(): void {
     overlay.classList.remove("visible");
     hud.classList.remove("hidden");
     updateHud();
+  });
+
+  resetBtn.addEventListener("click", () => {
+    resetFarm();
   });
 }
 
