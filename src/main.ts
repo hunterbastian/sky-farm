@@ -126,13 +126,17 @@ interface Chicken {
   variant: number; // color variant
 }
 
+// Chicken pen bounds (tile coordinates, inclusive)
+const PEN = { x1: 8, z1: 2, x2: 13, z2: 6 };
+
 const CHICKEN_COUNT = 4;
 const CHICKEN_SPEED = 0.8;
 const chickens: Chicken[] = [];
 for (let i = 0; i < CHICKEN_COUNT; i++) {
   chickens.push({
-    x: 3 + Math.random() * 8, z: 4 + Math.random() * 10,
-    targetX: 6, targetZ: 8,
+    x: PEN.x1 + 0.5 + Math.random() * (PEN.x2 - PEN.x1),
+    z: PEN.z1 + 0.5 + Math.random() * (PEN.z2 - PEN.z1),
+    targetX: (PEN.x1 + PEN.x2) / 2, targetZ: (PEN.z1 + PEN.z2) / 2,
     facing: Math.random() > 0.5 ? 1 : -1,
     walkTimer: 0, idleTimer: 2 + Math.random() * 3,
     state: "idle",
@@ -144,10 +148,103 @@ for (let i = 0; i < CHICKEN_COUNT; i++) {
 }
 
 function pickChickenTarget(c: Chicken): void {
-  const range = 5;
-  c.targetX = Math.max(1, Math.min(ISLAND_SIZE - 2, c.x + (Math.random() - 0.5) * range * 2));
-  c.targetZ = Math.max(1, Math.min(ISLAND_SIZE - 2, c.z + (Math.random() - 0.5) * range * 2));
+  // Stay inside pen
+  c.targetX = PEN.x1 + 0.5 + Math.random() * (PEN.x2 - PEN.x1);
+  c.targetZ = PEN.z1 + 0.5 + Math.random() * (PEN.z2 - PEN.z1);
   c.state = "walking";
+}
+
+function isPenTile(x: number, z: number): boolean {
+  return x >= PEN.x1 && x <= PEN.x2 && z >= PEN.z1 && z <= PEN.z2;
+}
+
+function drawChickenPen(g: Graphics): void {
+  const x1 = PEN.x1 * TILE_PX;
+  const z1 = PEN.z1 * TILE_PX;
+  const x2 = (PEN.x2 + 1) * TILE_PX;
+  const z2 = (PEN.z2 + 1) * TILE_PX;
+  const postC = 0x6a4830;
+  const postH = 0x8a6a4a;
+  const railC = 0x7a5838;
+  const railL = 0x9a7a50;
+
+  // Dirt/straw ground inside pen
+  for (let pz = PEN.z1; pz <= PEN.z2; pz++) {
+    for (let px = PEN.x1; px <= PEN.x2; px++) {
+      const tx = px * TILE_PX;
+      const tz = pz * TILE_PX;
+      // Sandy dirt base
+      g.rect(tx, tz, TILE_PX, TILE_PX).fill(0x9a8a60);
+      // Straw/dirt texture
+      const r = seededRandom(px * 100 + pz * 37 + 999);
+      for (let s = 0; s < 4; s++) {
+        const sx = Math.floor(r() * 14);
+        const sz = Math.floor(r() * 14);
+        g.rect(tx + sx, tz + sz, 2, 1).fill({ color: 0xb0a060, alpha: 0.4 });
+      }
+      for (let s = 0; s < 3; s++) {
+        const sx = Math.floor(r() * 14);
+        const sz = Math.floor(r() * 14);
+        g.rect(tx + sx, tz + sz, 1, 1).fill({ color: 0x887848, alpha: 0.3 });
+      }
+    }
+  }
+
+  // Fence posts at corners and every 2 tiles along edges
+  const drawPost = (px: number, pz: number) => {
+    g.rect(px - 1, pz - 6, 3, 7).fill(postC);
+    g.rect(px, pz - 6, 1, 7).fill(postH);
+    g.rect(px - 1, pz - 6, 3, 1).fill(postH); // cap
+  };
+
+  // Top rail (horizontal)
+  g.rect(x1 + 1, z1 - 3, x2 - x1 - 2, 2).fill(railC);
+  g.rect(x1 + 1, z1 - 3, x2 - x1 - 2, 1).fill(railL);
+  // Bottom rail
+  g.rect(x1 + 1, z2 - 3, x2 - x1 - 2, 2).fill(railC);
+  g.rect(x1 + 1, z2 - 3, x2 - x1 - 2, 1).fill(railL);
+  // Left rail (vertical)
+  g.rect(x1, z1 - 2, 2, z2 - z1 + 1).fill(railC);
+  g.rect(x1, z1 - 2, 1, z2 - z1 + 1).fill(railL);
+  // Right rail
+  g.rect(x2 - 1, z1 - 2, 2, z2 - z1 + 1).fill(railC);
+  g.rect(x2 - 1, z1 - 2, 1, z2 - z1 + 1).fill(railL);
+
+  // Posts at corners
+  drawPost(x1, z1);
+  drawPost(x2, z1);
+  drawPost(x1, z2);
+  drawPost(x2, z2);
+  // Mid-posts on long edges
+  const midX = Math.round((x1 + x2) / 2);
+  const midZ = Math.round((z1 + z2) / 2);
+  drawPost(midX, z1);
+  drawPost(midX, z2);
+  drawPost(x1, midZ);
+  drawPost(x2, midZ);
+
+  // Gate opening on the bottom edge (small gap)
+  const gateX = midX - 6;
+  g.rect(gateX, z2 - 4, 12, 5).fill(0x9a8a60); // cover the rail where gate is
+  // Gate posts
+  drawPost(gateX, z2);
+  drawPost(gateX + 12, z2);
+
+  // Feeding trough inside pen
+  const troughX = (PEN.x1 + 1) * TILE_PX + 2;
+  const troughZ = (PEN.z1 + 1) * TILE_PX;
+  g.rect(troughX, troughZ, 8, 3).fill(0x6a4830);
+  g.rect(troughX, troughZ, 8, 1).fill(0x8a6a4a);
+  g.rect(troughX + 1, troughZ + 1, 6, 1).fill(0xc4a840); // grain inside
+  g.rect(troughX + 2, troughZ + 1, 2, 1).fill({ color: 0xe0c860, alpha: 0.5 });
+
+  // Hay bale in corner
+  const hayX = (PEN.x2) * TILE_PX + 2;
+  const hayZ = (PEN.z1) * TILE_PX + 4;
+  g.rect(hayX, hayZ, 6, 5).fill(0xc4a848);
+  g.rect(hayX, hayZ, 6, 1).fill(0xd4b858);
+  g.rect(hayX + 1, hayZ + 1, 4, 1).fill(0xb09838);
+  g.rect(hayX + 1, hayZ + 3, 4, 1).fill(0xb09838);
 }
 
 function pickChickenIdle(c: Chicken): void {
@@ -186,6 +283,9 @@ function updateChickens(dt: number): void {
     }
     c.x += (dx / dist) * CHICKEN_SPEED * dt;
     c.z += (dz / dist) * CHICKEN_SPEED * dt;
+    // Clamp to pen
+    c.x = Math.max(PEN.x1 + 0.3, Math.min(PEN.x2 + 0.7, c.x));
+    c.z = Math.max(PEN.z1 + 0.3, Math.min(PEN.z2 + 0.7, c.z));
     if (Math.abs(dx) > 0.05) c.facing = dx > 0 ? 1 : -1;
     c.walkTimer += dt;
   }
@@ -1583,6 +1683,7 @@ function renderWorld(): void {
         drawPondTile(groundGfx, x, z);
         continue;
       }
+      if (isPenTile(x, z)) continue; // pen draws its own ground
       const tile = tiles[z]?.[x];
       if (!tile) continue;
       switch (tile) {
@@ -1598,6 +1699,7 @@ function renderWorld(): void {
     }
   }
 
+  drawChickenPen(groundGfx);
   drawCloudShadows(groundGfx);
   drawWildflowers(objectGfx);
   for (const crop of crops) drawCrop(objectGfx, crop);
@@ -1670,8 +1772,8 @@ function useTool(): void {
   // Collect eggs with any tool
   if (collectEgg(x, z)) { updateHud(); return; }
 
-  // Can't interact with pond tiles
-  if (isPondTile(x, z)) return;
+  // Can't interact with pond or pen tiles
+  if (isPondTile(x, z) || isPenTile(x, z)) return;
 
   const tool = TOOLS[selectedTool]!.id;
 
