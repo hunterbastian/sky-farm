@@ -222,8 +222,8 @@ const COLORS = {
   farmlandLight: 0x8a6e4a,
   farmlandWet: 0x4e3824,
   farmlandWetDark: 0x3a2818,
-  farmlandWetSheen: 0x5a6880,
-  water: 0x4a8fb8,
+  farmlandWetSheen: 0x476f95,
+  water: 0x7593af,
   cropGreen: 0x6ebc4e,
   cropGreenDark: 0x4e9636,
   cropGreenLight: 0x82d060,
@@ -232,7 +232,7 @@ const COLORS = {
   cropBrown: 0x8a6e40,
   highlight: 0xffffff,
   highlightHoe: 0xd4a850,
-  highlightWater: 0x6aaad0,
+  highlightWater: 0xa3b7ca,
   highlightSeeds: 0x7ecc5a,
   highlightAxe: 0xc4a870,
   leafDark: 0x2e7a1e,
@@ -591,25 +591,25 @@ function drawPondTile(g: Graphics, tx: number, tz: number): void {
   const now = performance.now() / 1000;
 
   // Base water
-  g.rect(px, pz, TILE_PX, TILE_PX).fill(0x3a7aa8);
+  g.rect(px, pz, TILE_PX, TILE_PX).fill(0x476f95);
 
   // Animated ripples
   const wave = Math.sin(now * 2 + tx * 1.5 + tz * 2) * 0.5 + 0.5;
-  g.rect(px + 2, pz + Math.round(wave * 4) + 2, 4, 1).fill({ color: 0x5aaad8, alpha: 0.4 });
-  g.rect(px + 8, pz + Math.round((1 - wave) * 5) + 6, 3, 1).fill({ color: 0x5aaad8, alpha: 0.3 });
+  g.rect(px + 2, pz + Math.round(wave * 4) + 2, 4, 1).fill({ color: 0x7593af, alpha: 0.4 });
+  g.rect(px + 8, pz + Math.round((1 - wave) * 5) + 6, 3, 1).fill({ color: 0xa3b7ca, alpha: 0.3 });
 
   // Shimmer highlights
   const shimmer = Math.sin(now * 3 + tx * 3 + tz) * 0.5 + 0.5;
   if (shimmer > 0.6) {
-    g.rect(px + 4 + Math.round(shimmer * 4), pz + 3, 1, 1).fill({ color: 0xc0e8ff, alpha: shimmer * 0.5 });
+    g.rect(px + 4 + Math.round(shimmer * 4), pz + 3, 1, 1).fill({ color: 0xd1dbe4, alpha: shimmer * 0.5 });
   }
 
   // Darker edge against grass
   const isEdge = (dx: number, dz: number) => !isPondTile(tx + dx, tz + dz);
-  if (isEdge(0, -1)) g.rect(px, pz, TILE_PX, 2).fill({ color: 0x2a6088, alpha: 0.4 });
-  if (isEdge(0, 1)) g.rect(px, pz + 14, TILE_PX, 2).fill({ color: 0x2a6088, alpha: 0.3 });
-  if (isEdge(-1, 0)) g.rect(px, pz, 2, TILE_PX).fill({ color: 0x2a6088, alpha: 0.3 });
-  if (isEdge(1, 0)) g.rect(px + 14, pz, 2, TILE_PX).fill({ color: 0x2a6088, alpha: 0.3 });
+  if (isEdge(0, -1)) g.rect(px, pz, TILE_PX, 2).fill({ color: 0x194a7a, alpha: 0.4 });
+  if (isEdge(0, 1)) g.rect(px, pz + 14, TILE_PX, 2).fill({ color: 0x194a7a, alpha: 0.3 });
+  if (isEdge(-1, 0)) g.rect(px, pz, 2, TILE_PX).fill({ color: 0x194a7a, alpha: 0.3 });
+  if (isEdge(1, 0)) g.rect(px + 14, pz, 2, TILE_PX).fill({ color: 0x194a7a, alpha: 0.3 });
 
   // Lily pad (only on a couple tiles)
   if ((tx === 4 && tz === 20) || (tx === 5 && tz === 21)) {
@@ -1059,10 +1059,10 @@ function drawSplashes(g: Graphics): void {
     if (alpha <= 0) continue;
     // Blue water droplet that fades
     const sz = Math.max(1, Math.round(s.size * (1 - s.life * 0.5)));
-    g.rect(Math.round(s.x), Math.round(s.z), sz, sz).fill({ color: 0x6aaad0, alpha: alpha * 0.7 });
+    g.rect(Math.round(s.x), Math.round(s.z), sz, sz).fill({ color: 0x7593af, alpha: alpha * 0.7 });
     // Lighter center for sheen
     if (sz > 1 && alpha > 0.3) {
-      g.rect(Math.round(s.x), Math.round(s.z), 1, 1).fill({ color: 0xa0d4f0, alpha: alpha * 0.5 });
+      g.rect(Math.round(s.x), Math.round(s.z), 1, 1).fill({ color: 0xd1dbe4, alpha: alpha * 0.5 });
     }
   }
 }
@@ -1862,10 +1862,10 @@ function drawFarmlandTile(g: Graphics, tx: number, tz: number, watered: boolean)
     for (let i = 0; i < 5; i++) {
       const dx = Math.floor(rand() * 12) + 2;
       const dz = Math.floor(rand() * 12) + 2;
-      g.rect(ox + dx, oz + dz, 1, 1).fill({ color: 0x6aaad0, alpha: 0.6 });
+      g.rect(ox + dx, oz + dz, 1, 1).fill({ color: 0xa3b7ca, alpha: 0.6 });
     }
     // Subtle wet sheen across surface
-    g.rect(ox + 2, oz + 1, TILE_PX - 4, TILE_PX - 2).fill({ color: 0x4a6a8a, alpha: 0.08 });
+    g.rect(ox + 2, oz + 1, TILE_PX - 4, TILE_PX - 2).fill({ color: 0x476f95, alpha: 0.08 });
   }
 
   // Border edge — grass transition hint
@@ -1900,7 +1900,7 @@ function drawCrop(g: Graphics, crop: CropState): void {
 
   if (crop.watered) {
     g.rect(cx + 13, cz + 1, 2, 2).fill({ color: COLORS.water, alpha: 0.6 });
-    g.rect(cx + 14, cz + 1, 1, 1).fill({ color: 0xa0d4f0, alpha: 0.4 });
+    g.rect(cx + 14, cz + 1, 1, 1).fill({ color: 0xd1dbe4, alpha: 0.4 });
   }
 }
 
@@ -2884,9 +2884,9 @@ function updateSky(): void {
   const sh = app.screen.height;
   const hour = (clockTime / 3600) % 24;
 
-  // Sky gradient — Bliss wallpaper with warm horizon
-  const dayTop = 0x245edb;
-  const dayBot = 0x8cc4e8;
+  // Sky gradient — water palette harmony
+  const dayTop = 0x194a7a;
+  const dayBot = 0xa3b7ca;
   const nightTop = 0x080e20;
   const nightBot = 0x101830;
   const sunsetTop = 0xc86030;

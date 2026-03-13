@@ -6,9 +6,9 @@
   --panel: #f9f6f2;
   --panel-strong: #e1dbd6;
   --accent: #4a8c2a;
-  --xp-blue: #0054e3;
-  --xp-blue-light: #1c72f0;
-  --xp-blue-dark: #003daa;
+  --xp-blue: #476f95;
+  --xp-blue-light: #7593af;
+  --xp-blue-dark: #194a7a;
   --xp-green: #3c8c2a;
   --xp-silver: #f9f6f2;
   --xp-border-light: #fefefe;
@@ -27,7 +27,7 @@ body {
   height: 100%;
   overflow: hidden;
   font-family: "Press Start 2P", monospace;
-  background: #245edb;
+  background: #194a7a;
 }
 
 
@@ -95,16 +95,16 @@ body {
 }
 
 .hotbar-slot:hover {
-  background: linear-gradient(180deg, #e8f0ff, #c8d8f0);
+  background: linear-gradient(180deg, #d1dbe4, #a3b7ca);
   border-color: var(--xp-blue);
-  border-top-color: #8cb0e8;
-  border-left-color: #8cb0e8;
+  border-top-color: #d1dbe4;
+  border-left-color: #d1dbe4;
 }
 
 .hotbar-slot.active {
-  border: 2px solid var(--xp-blue);
-  background: linear-gradient(180deg, #c0d8f8, #88b0e0);
-  box-shadow: inset 0 1px 3px rgba(0, 40, 120, 0.3);
+  border: 2px solid #476f95;
+  background: linear-gradient(180deg, #a3b7ca, #7593af);
+  box-shadow: inset 0 1px 3px rgba(25, 74, 122, 0.3);
   color: #000;
 }
 
@@ -115,7 +115,7 @@ body {
 }
 
 .hotbar-slot.active .slot-key {
-  color: #002060;
+  color: #194a7a;
 }
 
 .slot-name {
@@ -198,9 +198,9 @@ body {
   content: "";
   display: block;
   height: 28px;
-  background: linear-gradient(180deg, #0997ff, #0054e3 50%, #0040b8);
+  background: linear-gradient(180deg, #7593af, #476f95 50%, #194a7a);
   border-radius: 5px 5px 0 0;
-  border-bottom: 1px solid #003090;
+  border-bottom: 1px solid #194a7a;
 }
 
 .panel h1 {
@@ -244,14 +244,14 @@ button {
 }
 
 button:hover {
-  background: linear-gradient(180deg, #e8f0ff, #c8d8f0, #a8b8d8);
-  border-color: var(--xp-blue);
-  border-top-color: #8cb0e8;
-  border-left-color: #8cb0e8;
+  background: linear-gradient(180deg, #d1dbe4, #a3b7ca, #7593af);
+  border-color: #476f95;
+  border-top-color: #d1dbe4;
+  border-left-color: #d1dbe4;
 }
 
 button:active {
-  background: linear-gradient(180deg, #b0c0d8, #c8d8f0);
+  background: linear-gradient(180deg, #7593af, #a3b7ca);
   border-top-color: var(--xp-border-dark);
   border-left-color: var(--xp-border-dark);
   border-bottom-color: var(--xp-border-light);
