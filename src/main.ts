@@ -74,6 +74,60 @@ function seededRandom(seed: number): () => number {
   };
 }
 
+// ── Stego ─────────────────────────────────────────────────
+const STEGO_SPEED = 1.2;
+const STEGO_IDLE_MIN = 2;
+const STEGO_IDLE_MAX = 5;
+
+const stego = {
+  x: 6,
+  z: 6,
+  targetX: 6,
+  targetZ: 6,
+  facing: 1, // -1 = left, 1 = right
+  walkTimer: 0,
+  idleTimer: 3,
+  state: "idle" as "idle" | "walking",
+};
+
+function pickStegoTarget(): void {
+  // Pick a random grass tile within ~6 tiles
+  const range = 6;
+  const tx = stego.x + (Math.random() * range * 2 - range);
+  const tz = stego.z + (Math.random() * range * 2 - range);
+  stego.targetX = Math.max(1, Math.min(ISLAND_SIZE - 1, tx));
+  stego.targetZ = Math.max(1, Math.min(ISLAND_SIZE - 1, tz));
+  stego.state = "walking";
+}
+
+function updateStego(dt: number): void {
+  if (stego.state === "idle") {
+    stego.idleTimer -= dt;
+    if (stego.idleTimer <= 0) pickStegoTarget();
+    return;
+  }
+
+  const dx = stego.targetX - stego.x;
+  const dz = stego.targetZ - stego.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+
+  if (dist < 0.1) {
+    stego.state = "idle";
+    stego.idleTimer = STEGO_IDLE_MIN + Math.random() * (STEGO_IDLE_MAX - STEGO_IDLE_MIN);
+    return;
+  }
+
+  const nx = dx / dist;
+  const nz = dz / dist;
+  stego.x += nx * STEGO_SPEED * dt;
+  stego.z += nz * STEGO_SPEED * dt;
+  stego.x = Math.max(0.5, Math.min(ISLAND_SIZE - 0.5, stego.x));
+  stego.z = Math.max(0.5, Math.min(ISLAND_SIZE - 0.5, stego.z));
+
+  if (Math.abs(dx) > 0.05) stego.facing = dx > 0 ? 1 : -1;
+  stego.walkTimer += dt;
+}
+
 // ── Game State ────────────────────────────────────────────
 const tiles: TileType[][] = [];
 for (let z = 0; z < ISLAND_SIZE; z++) {
@@ -264,6 +318,86 @@ function drawCrop(g: Graphics, crop: CropState): void {
   }
 }
 
+function drawStego(g: Graphics): void {
+  const px = stego.x * TILE_PX;
+  const pz = stego.z * TILE_PX;
+  const f = stego.facing; // 1 = right, -1 = left
+  const bob = stego.state === "walking" ? Math.sin(stego.walkTimer * 6) * 0.4 : 0;
+  const legSwing = stego.state === "walking" ? Math.sin(stego.walkTimer * 8) * 1 : 0;
+
+  // Center the sprite on the tile position
+  const cx = px + 8;
+  const cy = pz + 8;
+
+  // Helper to draw mirrored around center
+  const r = (ox: number, oy: number, w: number, h: number, color: number, alpha = 1) => {
+    g.rect(cx + ox * f, cy + oy, w, h).fill(alpha < 1 ? { color, alpha } : color);
+  };
+
+  // Shadow
+  g.ellipse(cx, cy + 7, 7, 2).fill({ color: 0x000000, alpha: 0.15 });
+
+  // Legs (4 stubby legs)
+  const legColor = 0x5a9a40;
+  const legDark = 0x4a8234;
+  r(-5, 4 + legSwing * 0.3, 2, 3, legColor);
+  r(-5, 6 + legSwing * 0.3, 2, 1, legDark);
+  r(-2, 4 - legSwing * 0.3, 2, 3, legColor);
+  r(-2, 6 - legSwing * 0.3, 2, 1, legDark);
+  r(2, 4 + legSwing * 0.2, 2, 3, legColor);
+  r(2, 6 + legSwing * 0.2, 2, 1, legDark);
+  r(5, 4 - legSwing * 0.2, 2, 3, legColor);
+  r(5, 6 - legSwing * 0.2, 2, 1, legDark);
+
+  // Body — big rounded oval
+  const bodyColor = 0x6ebc4e;
+  const bodyDark = 0x5aa63e;
+  g.rect(cx - 6, cy - 2 + bob, 12, 6).fill(bodyColor);
+  g.rect(cx - 5, cy - 3 + bob, 10, 1).fill(bodyColor);
+  g.rect(cx - 5, cy + 4 + bob, 10, 1).fill(bodyDark);
+
+  // Back hump (stego's arched back)
+  g.rect(cx - 4, cy - 4 + bob, 8, 2).fill(bodyColor);
+  g.rect(cx - 2, cy - 5 + bob, 4, 1).fill(bodyColor);
+
+  // Plates along the back (5 triangular plates)
+  const plateColor = 0x8ad468;
+  const plateDark = 0x5eaa3e;
+  // Plate positions along the spine
+  for (let i = 0; i < 5; i++) {
+    const plateX = cx - 4 + i * 2;
+    const plateY = cy - 5 + bob - (i < 2 || i > 3 ? 0 : 1);
+    g.rect(plateX, plateY - 2, 2, 2).fill(plateColor);
+    g.rect(plateX, plateY, 2, 1).fill(plateDark);
+    // Tiny tip
+    if (i === 1 || i === 2 || i === 3) {
+      g.rect(plateX, plateY - 3, 1, 1).fill(plateColor);
+    }
+  }
+
+  // Tail — extends behind
+  const tailX = f === 1 ? cx - 7 : cx + 7;
+  g.rect(tailX, cy + bob, 3, 2).fill(bodyColor);
+  g.rect(tailX + (f === 1 ? -2 : 2), cy + 1 + bob, 2, 1).fill(bodyDark);
+  // Tail spikes
+  g.rect(tailX + (f === 1 ? -1 : 2), cy - 1 + bob, 1, 1).fill(plateColor);
+  g.rect(tailX + (f === 1 ? -2 : 3), cy + bob, 1, 1).fill(plateColor);
+
+  // Head — small, extends forward
+  const headX = f === 1 ? cx + 6 : cx - 8;
+  g.rect(headX, cy - 2 + bob, 3, 4).fill(bodyColor);
+  g.rect(headX + (f === 1 ? 3 : -1), cy - 1 + bob, 1, 3).fill(bodyColor);
+  // Snout
+  g.rect(headX + (f === 1 ? 3 : -1), cy + bob, 1, 2).fill(bodyDark);
+
+  // Eye
+  const eyeX = headX + (f === 1 ? 2 : 0);
+  g.rect(eyeX, cy - 1 + bob, 1, 1).fill(0x2a2a2a);
+
+  // Belly highlight
+  g.rect(cx - 4, cy + 2 + bob, 8, 1).fill({ color: 0x8edc5e, alpha: 0.5 });
+}
+
 function drawHighlight(g: Graphics, tx: number, tz: number): void {
   const x = tx * TILE_PX;
   const z = tz * TILE_PX;
@@ -315,6 +449,7 @@ function renderWorld(): void {
   }
 
   for (const crop of crops) drawCrop(objectGfx, crop);
+  drawStego(objectGfx);
 
   if (hoveredTile && hoveredTile.x >= 0 && hoveredTile.x < ISLAND_SIZE && hoveredTile.z >= 0 && hoveredTile.z < ISLAND_SIZE) {
     drawHighlight(uiGfx, hoveredTile.x, hoveredTile.z);
@@ -559,6 +694,7 @@ function gameLoop(ticker: Ticker): void {
   const dt = Math.min(ticker.deltaMS / 1000, 0.05);
   if (gameMode === "playing") {
     updateClock(dt);
+    updateStego(dt);
     saveTimer += dt;
     if (saveTimer >= 30) { saveTimer = 0; saveGame(); }
     updateHud();
