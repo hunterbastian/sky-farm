@@ -233,6 +233,11 @@ const COLORS = {
   highlightHoe: 0xd4a850,
   highlightWater: 0x6aaad0,
   highlightSeeds: 0x7ecc5a,
+  highlightAxe: 0xc4a870,
+  leafDark: 0x2e7a1e,
+  leafMid: 0x3e9a2e,
+  leafLight: 0x5aba3e,
+  leafHighlight: 0x70cc50,
 };
 
 // ── Trees ─────────────────────────────────────────────────
@@ -1604,112 +1609,82 @@ function drawMoonFlower(g: Graphics, cx: number, cz: number, sw: number, progres
 }
 
 function drawTree(g: Graphics, tree: TreeState): void {
-  if (tree.chopTime >= CHOP_HITS && !tree.falling) return; // fully chopped & done falling
+  if (tree.chopTime >= CHOP_HITS && !tree.falling) return;
   const cx = tree.x * TILE_PX + TILE_PX / 2;
   const cz = tree.z * TILE_PX + TILE_PX;
-  const now = performance.now() / 1000;
 
-  // During fall animation, suppress sway and apply rotation
-  const isFalling = tree.falling;
-  const sway = isFalling ? 0 : Math.sin(now * 1.2 + tree.variant * 2) * 0.6;
-  const sw = Math.round(sway);
-  const fallAlpha = isFalling ? Math.max(0, 1 - tree.fallAngle / (Math.PI / 2)) : 1;
+  if (tree.falling) {
+    // ── Fall animation path (closures only allocated when actually falling) ──
+    const fallAlpha = Math.max(0, 1 - tree.fallAngle / (Math.PI / 2));
+    const cosA = Math.cos(tree.fallAngle * tree.fallDir);
+    const sinA = Math.sin(tree.fallAngle * tree.fallDir);
+    const rRect = (rx: number, rz: number, w: number, h: number, color: number) => {
+      for (let row = 0; row < h; row++) {
+        const dx1 = rx - cx, dx2 = rx + w - cx, dz = rz + row - cz;
+        const x1 = cx + dx1 * cosA - dz * sinA;
+        const z1 = cz + dx1 * sinA + dz * cosA;
+        const x2 = cx + dx2 * cosA - dz * sinA;
+        const z2 = cz + dx2 * sinA + dz * cosA;
+        g.rect(Math.round(x1), Math.round(z1), Math.round(x2 - x1) || 1, Math.round(z2 - z1) || 1)
+          .fill({ color, alpha: fallAlpha });
+      }
+    };
 
-  // Helper: rotate a point (px, pz) around the tree base (cx, cz) by fallAngle
-  const cosA = isFalling ? Math.cos(tree.fallAngle * tree.fallDir) : 1;
-  const sinA = isFalling ? Math.sin(tree.fallAngle * tree.fallDir) : 0;
-  const rot = (px: number, pz: number): [number, number] => {
-    if (!isFalling) return [px, pz];
-    const dx = px - cx;
-    const dz = pz - cz;
-    return [cx + dx * cosA - dz * sinA, cz + dx * sinA + dz * cosA];
-  };
-  // Rotated rect helper
-  const rRect = (rx: number, rz: number, w: number, h: number, color: number | { color: number; alpha: number }) => {
-    // Draw each pixel row rotated around tree base
-    for (let row = 0; row < h; row++) {
-      const [x1, z1] = rot(rx, rz + row);
-      const [x2, z2] = rot(rx + w, rz + row);
-      // Approximate with a single rect along the rotated line
-      g.rect(Math.round(x1), Math.round(z1), Math.round(x2 - x1) || 1, Math.round(z2 - z1) || 1)
-        .fill(typeof color === "number" ? { color, alpha: fallAlpha } : { color: color.color, alpha: color.alpha * fallAlpha });
-    }
-  };
-
-  // Shadow (stays at base, shrinks during fall)
-  const shadowScale = isFalling ? fallAlpha : 1;
-  g.ellipse(cx, cz + 1, 6 * shadowScale, 2 * shadowScale).fill({ color: 0x000000, alpha: 0.15 * fallAlpha });
-
-  if (isFalling) {
-    // Use rotated drawing for fall animation
+    g.ellipse(cx, cz + 1, 6 * fallAlpha, 2 * fallAlpha).fill({ color: 0x000000, alpha: 0.15 * fallAlpha });
     rRect(cx - 2, cz - 12, 4, 13, 0x6a4830);
     rRect(cx - 1, cz - 12, 2, 13, 0x7a5a3a);
+    rRect(cx - 7, cz - 16, 14, 6, COLORS.leafDark);
+    rRect(cx - 6, cz - 17, 12, 1, COLORS.leafDark);
+    rRect(cx - 6, cz - 10, 12, 1, COLORS.leafDark);
+    rRect(cx - 6, cz - 20, 12, 6, COLORS.leafMid);
+    rRect(cx - 5, cz - 21, 10, 1, COLORS.leafMid);
+    rRect(cx - 4, cz - 23, 8, 4, COLORS.leafLight);
+    rRect(cx - 3, cz - 24, 6, 1, COLORS.leafLight);
+    rRect(cx - 2, cz - 25, 4, 1, COLORS.leafHighlight);
+    return;
+  }
 
-    const leafDark = 0x2e7a1e;
-    const leafMid = 0x3e9a2e;
-    const leafLight = 0x5aba3e;
-    const leafHighlight = 0x70cc50;
+  // ── Normal upright drawing (no closures, no trig) ──
+  const now = performance.now() / 1000;
+  const sw = Math.round(Math.sin(now * 1.2 + tree.variant * 2) * 0.6);
 
-    rRect(cx - 7, cz - 16, 14, 6, leafDark);
-    rRect(cx - 6, cz - 17, 12, 1, leafDark);
-    rRect(cx - 6, cz - 10, 12, 1, leafDark);
-    rRect(cx - 6, cz - 20, 12, 6, leafMid);
-    rRect(cx - 5, cz - 21, 10, 1, leafMid);
-    rRect(cx - 4, cz - 23, 8, 4, leafLight);
-    rRect(cx - 3, cz - 24, 6, 1, leafLight);
-    rRect(cx - 2, cz - 25, 4, 1, leafHighlight);
-  } else {
-    // Normal upright drawing
-    // Trunk
-    g.rect(cx - 2, cz - 12, 4, 13).fill(0x6a4830);
-    g.rect(cx - 1, cz - 12, 2, 13).fill(0x7a5a3a);
-    // Trunk highlight
-    g.rect(cx, cz - 10, 1, 8).fill({ color: 0x8a6a4a, alpha: 0.5 });
-    // Bark texture
-    g.rect(cx - 2, cz - 8, 1, 1).fill(0x5a3820);
-    g.rect(cx + 1, cz - 5, 1, 1).fill(0x5a3820);
+  // Shadow
+  g.ellipse(cx, cz + 1, 6, 2).fill({ color: 0x000000, alpha: 0.15 });
+  // Trunk
+  g.rect(cx - 2, cz - 12, 4, 13).fill(0x6a4830);
+  g.rect(cx - 1, cz - 12, 2, 13).fill(0x7a5a3a);
+  g.rect(cx, cz - 10, 1, 8).fill({ color: 0x8a6a4a, alpha: 0.5 });
+  g.rect(cx - 2, cz - 8, 1, 1).fill(0x5a3820);
+  g.rect(cx + 1, cz - 5, 1, 1).fill(0x5a3820);
 
-    // Canopy — layered circles
-    const leafDark = 0x2e7a1e;
-    const leafMid = 0x3e9a2e;
-    const leafLight = 0x5aba3e;
-    const leafHighlight = 0x70cc50;
+  // Canopy
+  g.rect(cx - 7 + sw, cz - 16, 14, 6).fill(COLORS.leafDark);
+  g.rect(cx - 6 + sw, cz - 17, 12, 1).fill(COLORS.leafDark);
+  g.rect(cx - 6 + sw, cz - 10, 12, 1).fill(COLORS.leafDark);
+  g.rect(cx - 6 + sw, cz - 20, 12, 6).fill(COLORS.leafMid);
+  g.rect(cx - 5 + sw, cz - 21, 10, 1).fill(COLORS.leafMid);
+  g.rect(cx - 4 + sw, cz - 23, 8, 4).fill(COLORS.leafLight);
+  g.rect(cx - 3 + sw, cz - 24, 6, 1).fill(COLORS.leafLight);
+  g.rect(cx - 2 + sw, cz - 25, 4, 1).fill(COLORS.leafHighlight);
 
-    // Bottom canopy layer
-    g.rect(cx - 7 + sw, cz - 16, 14, 6).fill(leafDark);
-    g.rect(cx - 6 + sw, cz - 17, 12, 1).fill(leafDark);
-    g.rect(cx - 6 + sw, cz - 10, 12, 1).fill(leafDark);
+  // Dappled light
+  const r = seededRandom(tree.variant * 999);
+  for (let i = 0; i < 6; i++) {
+    const lx = Math.floor(r() * 10) - 5;
+    const lz = Math.floor(r() * 10) - 20;
+    g.rect(cx + lx + sw, cz + lz, 2, 1).fill({ color: COLORS.leafHighlight, alpha: 0.6 });
+  }
+  for (let i = 0; i < 4; i++) {
+    const lx = Math.floor(r() * 10) - 5;
+    const lz = Math.floor(r() * 8) - 18;
+    g.rect(cx + lx + sw, cz + lz, 2, 2).fill({ color: 0x1e6a10, alpha: 0.4 });
+  }
 
-    // Middle canopy
-    g.rect(cx - 6 + sw, cz - 20, 12, 6).fill(leafMid);
-    g.rect(cx - 5 + sw, cz - 21, 10, 1).fill(leafMid);
-
-    // Top canopy
-    g.rect(cx - 4 + sw, cz - 23, 8, 4).fill(leafLight);
-    g.rect(cx - 3 + sw, cz - 24, 6, 1).fill(leafLight);
-    g.rect(cx - 2 + sw, cz - 25, 4, 1).fill(leafHighlight);
-
-    // Leaf highlights (dappled light)
-    const r = seededRandom(tree.variant * 999);
-    for (let i = 0; i < 6; i++) {
-      const lx = Math.floor(r() * 10) - 5;
-      const lz = Math.floor(r() * 10) - 20;
-      g.rect(cx + lx + sw, cz + lz, 2, 1).fill({ color: leafHighlight, alpha: 0.6 });
-    }
-    // Dark depth spots
-    for (let i = 0; i < 4; i++) {
-      const lx = Math.floor(r() * 10) - 5;
-      const lz = Math.floor(r() * 8) - 18;
-      g.rect(cx + lx + sw, cz + lz, 2, 2).fill({ color: 0x1e6a10, alpha: 0.4 });
-    }
-
-    // Chop damage indicator
-    if (tree.chopTime > 0 && tree.chopTime < CHOP_HITS) {
-      // Axe marks on trunk
-      for (let i = 0; i < tree.chopTime; i++) {
-        g.rect(cx - 2, cz - 6 + i * 3, 3, 1).fill(0xc4a870);
-        g.rect(cx - 2, cz - 5 + i * 3, 2, 1).fill(0x4a2810);
-      }
+  // Chop damage
+  if (tree.chopTime > 0 && tree.chopTime < CHOP_HITS) {
+    for (let i = 0; i < tree.chopTime; i++) {
+      g.rect(cx - 2, cz - 6 + i * 3, 3, 1).fill(0xc4a870);
+      g.rect(cx - 2, cz - 5 + i * 3, 2, 1).fill(0x4a2810);
     }
   }
 }
@@ -1801,7 +1776,7 @@ function drawHighlight(g: Graphics, tx: number, tz: number): void {
   const tool = TOOLS[selectedTool]!.id;
   const color = tool === "hoe" ? COLORS.highlightHoe
     : tool === "water" ? COLORS.highlightWater
-    : tool === "axe" ? COLORS.highlightHoe
+    : tool === "axe" ? COLORS.highlightAxe
     : COLORS.highlightSeeds;
 
   // Filled tint
@@ -2237,28 +2212,44 @@ function updateDayClock(): void {
   dayClock.appendChild(label);
 }
 
+let hudPrevCoins = -1;
+let hudPrevWood = -1;
+let hudPrevTool = -1;
+let hudPrevSeed = -1;
+let hudPrevMinute = -1;
+
 function updateHud(): void {
   const totalHours = clockTime / 3600;
   const hours = Math.floor(totalHours) % 24;
   const minutes = Math.floor((totalHours % 1) * 60);
-  hudTime.textContent = `Day ${clockDay} \u00b7 ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-  hudCoins.textContent = `Coins ${coins} · Wood ${wood}`;
+
+  // Only touch DOM when values actually changed
+  if (minutes !== hudPrevMinute || clockDay !== hudPrevCoins) {
+    hudTime.textContent = `Day ${clockDay} \u00b7 ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    hudPrevMinute = minutes;
+  }
+  if (coins !== hudPrevCoins || wood !== hudPrevWood) {
+    hudCoins.textContent = `Coins ${coins} · Wood ${wood}`;
+    hudPrevCoins = coins;
+    hudPrevWood = wood;
+  }
   updateDayClock();
 
-  // Update toolbar slots (don't rebuild — just update classes and text)
-  for (let i = 0; i < TOOL_COUNT; i++) {
-    const slot = toolbarSlots[i];
-    if (!slot) continue;
-    const tool = TOOLS[i]!;
-    slot.div.className = `hotbar-slot${i === selectedTool ? " active" : ""}`;
-    if (tool.id === "seeds") {
-      const seedDef = CROP_DEFS[CROP_IDS[selectedSeed]!];
-      slot.icon.textContent = seedDef.icon;
-      slot.name.textContent = seedDef.label;
-    } else {
-      slot.icon.textContent = tool.icon;
-      slot.name.textContent = tool.label;
+  // Only update toolbar when tool/seed selection changed
+  if (selectedTool !== hudPrevTool || selectedSeed !== hudPrevSeed) {
+    for (let i = 0; i < TOOL_COUNT; i++) {
+      const slot = toolbarSlots[i];
+      if (!slot) continue;
+      const tool = TOOLS[i]!;
+      slot.div.className = `hotbar-slot${i === selectedTool ? " active" : ""}`;
+      if (tool.id === "seeds") {
+        const seedDef = CROP_DEFS[CROP_IDS[selectedSeed]!];
+        slot.icon.textContent = seedDef.icon;
+        slot.name.textContent = seedDef.label;
+      }
     }
+    hudPrevTool = selectedTool;
+    hudPrevSeed = selectedSeed;
   }
 }
 
