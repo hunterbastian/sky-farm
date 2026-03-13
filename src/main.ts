@@ -3,7 +3,7 @@ import { Application, Container, Graphics, Ticker } from "pixi.js";
 // ── Types ─────────────────────────────────────────────────
 type TileType = "grass" | "farmland";
 type CropTypeId = "sky_wheat";
-type ToolId = "hoe" | "water" | "seeds";
+type ToolId = "hoe" | "water" | "seeds" | "axe";
 
 interface CropState {
   x: number;
@@ -22,18 +22,22 @@ interface CropDefinition {
 const ISLAND_SIZE = 24;
 const TILE_PX = 16;
 const RENDER_SCALE = 3;
-const TOOL_COUNT = 3;
+const TOOL_COUNT = 4;
 
+// Day cycle: 3.5 min total (3 min day + 30s night)
+// We map 24 game-hours onto 210 real seconds
+// Dawn 5-7, Day 7-18, Sunset 18-20, Night 20-5
 const WORLD_DAY_SECONDS = 86_400;
-const REAL_DAY_SECONDS = 540;
-const TIME_SCALE = WORLD_DAY_SECONDS / REAL_DAY_SECONDS;
-const DAWN_SECONDS = 6 * 3600;
+const REAL_CYCLE_SECONDS = 210; // 3.5 minutes real time per full day
+const TIME_SCALE = WORLD_DAY_SECONDS / REAL_CYCLE_SECONDS;
+const DAWN_SECONDS = 9 * 3600; // spawn at 9 AM (clear day)
 const SAVE_KEY = "sky_farm_save_v2";
 
 const TOOLS: { id: ToolId; label: string; icon: string }[] = [
   { id: "hoe", label: "Hoe", icon: "⛏" },
   { id: "water", label: "Water", icon: "💧" },
   { id: "seeds", label: "Seeds", icon: "🌱" },
+  { id: "axe", label: "Axe", icon: "🪓" },
 ];
 
 const CROP_DEFS: Record<CropTypeId, CropDefinition> = {
@@ -45,25 +49,48 @@ const COLORS = {
   grass1: 0x5daa3e,
   grass2: 0x4e9636,
   grass3: 0x6ebc4e,
+  grass4: 0x68b845,
+  grass5: 0x58a038,
   grassDark: 0x3e7e2c,
   grassLight: 0x7ecc5a,
+  grassHighlight: 0x90d86a,
   grassEdge: 0x3a6e24,
   cliffTop: 0x4a6a3e,
+  cliffMid: 0x364a30,
   cliffFace: 0x2a3828,
   cliffShadow: 0x1e2a1c,
+  cliffDeep: 0x141e14,
+  cliffMoss: 0x3a5830,
   farmland: 0x7a5e3c,
   farmlandDark: 0x5e4228,
+  farmlandLight: 0x8a6e4a,
   farmlandWet: 0x4e3824,
   farmlandWetDark: 0x3a2818,
+  farmlandWetSheen: 0x5a6880,
   water: 0x4a8fb8,
   cropGreen: 0x6ebc4e,
   cropGreenDark: 0x4e9636,
+  cropGreenLight: 0x82d060,
   cropYellow: 0xe0d040,
+  cropYellowLight: 0xf0e060,
+  cropBrown: 0x8a6e40,
   highlight: 0xffffff,
   highlightHoe: 0xd4a850,
   highlightWater: 0x6aaad0,
   highlightSeeds: 0x7ecc5a,
 };
+
+// ── Trees ─────────────────────────────────────────────────
+interface TreeState {
+  x: number;
+  z: number;
+  chopTime: number; // 0 = standing, >= CHOP_HITS = chopped
+  regrowTimer: number; // seconds until regrow (counts down when chopped)
+  variant: number; // visual variation seed
+}
+
+const CHOP_HITS = 3;
+const TREE_REGROW_SECONDS = 60;
 
 // ── Seeded random ─────────────────────────────────────────
 function seededRandom(seed: number): () => number {
@@ -74,58 +101,288 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-// ── Stego ─────────────────────────────────────────────────
-const STEGO_SPEED = 1.2;
-const STEGO_IDLE_MIN = 2;
-const STEGO_IDLE_MAX = 5;
-
-const stego = {
-  x: 6,
-  z: 6,
-  targetX: 6,
-  targetZ: 6,
-  facing: 1, // -1 = left, 1 = right
-  walkTimer: 0,
-  idleTimer: 3,
-  state: "idle" as "idle" | "walking",
-};
-
-function pickStegoTarget(): void {
-  // Pick a random grass tile within ~6 tiles
-  const range = 6;
-  const tx = stego.x + (Math.random() * range * 2 - range);
-  const tz = stego.z + (Math.random() * range * 2 - range);
-  stego.targetX = Math.max(1, Math.min(ISLAND_SIZE - 1, tx));
-  stego.targetZ = Math.max(1, Math.min(ISLAND_SIZE - 1, tz));
-  stego.state = "walking";
+// ── Chickens ──────────────────────────────────────────────
+interface Chicken {
+  x: number; z: number;
+  targetX: number; targetZ: number;
+  facing: number; // -1 left, 1 right
+  walkTimer: number;
+  idleTimer: number;
+  state: "idle" | "walking";
+  idleAnim: "peck" | "ruffle" | "look" | "sit";
+  idleAnimTimer: number;
+  peckPhase: number;
+  rufflePhase: number;
+  lookDir: number;
+  blinkTimer: number;
+  blinking: boolean;
+  variant: number; // color variant
 }
 
-function updateStego(dt: number): void {
-  if (stego.state === "idle") {
-    stego.idleTimer -= dt;
-    if (stego.idleTimer <= 0) pickStegoTarget();
-    return;
+const CHICKEN_COUNT = 4;
+const CHICKEN_SPEED = 0.8;
+const chickens: Chicken[] = [];
+for (let i = 0; i < CHICKEN_COUNT; i++) {
+  chickens.push({
+    x: 3 + Math.random() * 8, z: 4 + Math.random() * 10,
+    targetX: 6, targetZ: 8,
+    facing: Math.random() > 0.5 ? 1 : -1,
+    walkTimer: 0, idleTimer: 2 + Math.random() * 3,
+    state: "idle",
+    idleAnim: "peck", idleAnimTimer: 1,
+    peckPhase: 0, rufflePhase: 0, lookDir: 0,
+    blinkTimer: 2 + Math.random() * 3, blinking: false,
+    variant: i,
+  });
+}
+
+function pickChickenTarget(c: Chicken): void {
+  const range = 5;
+  c.targetX = Math.max(1, Math.min(ISLAND_SIZE - 2, c.x + (Math.random() - 0.5) * range * 2));
+  c.targetZ = Math.max(1, Math.min(ISLAND_SIZE - 2, c.z + (Math.random() - 0.5) * range * 2));
+  c.state = "walking";
+}
+
+function pickChickenIdle(c: Chicken): void {
+  const anims: Chicken["idleAnim"][] = ["peck", "ruffle", "look", "sit"];
+  c.idleAnim = anims[Math.floor(Math.random() * anims.length)]!;
+  c.idleAnimTimer = 1 + Math.random() * 2;
+  if (c.idleAnim === "look") c.lookDir = Math.random() > 0.5 ? 1 : -1;
+}
+
+function updateChickens(dt: number): void {
+  for (const c of chickens) {
+    c.blinkTimer -= dt;
+    if (c.blinkTimer <= 0) {
+      c.blinking = !c.blinking;
+      c.blinkTimer = c.blinking ? 0.12 : 1.5 + Math.random() * 2;
+    }
+
+    if (c.state === "idle") {
+      c.idleTimer -= dt;
+      c.idleAnimTimer -= dt;
+      if (c.idleAnimTimer <= 0) pickChickenIdle(c);
+      if (c.idleAnim === "peck") c.peckPhase += dt * 6;
+      if (c.idleAnim === "ruffle") c.rufflePhase += dt * 10;
+      if (c.idleTimer <= 0) pickChickenTarget(c);
+      return;
+    }
+
+    const dx = c.targetX - c.x;
+    const dz = c.targetZ - c.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < 0.1) {
+      c.state = "idle";
+      c.idleTimer = 2 + Math.random() * 4;
+      pickChickenIdle(c);
+      return;
+    }
+    c.x += (dx / dist) * CHICKEN_SPEED * dt;
+    c.z += (dz / dist) * CHICKEN_SPEED * dt;
+    if (Math.abs(dx) > 0.05) c.facing = dx > 0 ? 1 : -1;
+    c.walkTimer += dt;
+  }
+}
+
+function drawChicken(g: Graphics, c: Chicken): void {
+  const px = Math.round(c.x * TILE_PX);
+  const pz = Math.round(c.z * TILE_PX);
+  const f = c.facing;
+  const walking = c.state === "walking";
+  const bob = walking ? Math.sin(c.walkTimer * 8) * 0.6 : 0;
+  const legSwing = walking ? Math.sin(c.walkTimer * 10) * 1.2 : 0;
+  const peckY = c.idleAnim === "peck" && !walking ? Math.sin(c.peckPhase) * 1.5 : 0;
+  const ruffle = c.idleAnim === "ruffle" && !walking ? Math.sin(c.rufflePhase) * 0.5 : 0;
+
+  // Color variants
+  const bodyColors = [
+    { body: 0xf0e8d0, wing: 0xe0d4b0, dark: 0xc4b890 }, // white
+    { body: 0xd4a050, wing: 0xc09040, dark: 0xa07830 }, // brown
+    { body: 0xf0c878, wing: 0xe0b868, dark: 0xc49848 }, // golden
+    { body: 0xc0c0c0, wing: 0xa8a8a8, dark: 0x909090 }, // grey
+  ];
+  const col = bodyColors[c.variant % bodyColors.length]!;
+
+  const cx = px + 8;
+  const cy = pz + 12 + Math.round(bob);
+
+  // Shadow
+  g.ellipse(cx, cy + 4, 3, 1).fill({ color: 0x000000, alpha: 0.1 });
+
+  // Legs — orange sticks
+  g.rect(cx - 1, cy + 2 + legSwing * 0.3, 1, 2).fill(0xd08020);
+  g.rect(cx + 1, cy + 2 - legSwing * 0.3, 1, 2).fill(0xd08020);
+  // Feet
+  g.rect(cx - 2, cy + 4 + legSwing * 0.3, 2, 1).fill(0xd08020);
+  g.rect(cx, cy + 4 - legSwing * 0.3, 2, 1).fill(0xd08020);
+
+  // Body — round blob
+  g.rect(cx - 3, cy - 1 + Math.round(ruffle), 6, 4).fill(col.body);
+  g.rect(cx - 2, cy - 2 + Math.round(ruffle), 4, 1).fill(col.body);
+  g.rect(cx - 2, cy + 3, 4, 1).fill(col.dark);
+  // Wing
+  g.rect(cx + f * -2, cy, 3, 2).fill(col.wing);
+  g.rect(cx + f * -2, cy + 2, 2, 1).fill(col.dark);
+
+  // Tail feathers
+  const tailDir = f === 1 ? -1 : 1;
+  g.rect(cx + tailDir * 3, cy - 2, 1, 2).fill(col.wing);
+  g.rect(cx + tailDir * 4, cy - 3, 1, 2).fill(col.dark);
+
+  // Head
+  const hx = cx + f * 3;
+  const hy = cy - 3 + Math.round(peckY * 0.5);
+  g.rect(hx - 1, hy, 3, 3).fill(col.body);
+  g.rect(hx, hy - 1, 1, 1).fill(col.body);
+
+  // Comb — red on top
+  g.rect(hx, hy - 2, 1, 1).fill(0xe03030);
+  g.rect(hx - 1, hy - 1, 1, 1).fill(0xe03030);
+
+  // Wattle — small red under beak
+  g.rect(hx + f * 1, hy + 2, 1, 1).fill(0xd02828);
+
+  // Beak — orange
+  g.rect(hx + f * 1, hy + 1 + Math.round(peckY * 0.3), 1, 1).fill(0xf0a020);
+
+  // Eye
+  if (!c.blinking) {
+    g.rect(hx + (f === 1 ? 1 : -1), hy, 1, 1).fill(0x1a1a1a);
+    g.rect(hx + (f === 1 ? 1 : -1), hy, 1, 1).fill({ color: 0xffffff, alpha: 0.3 });
+  } else {
+    g.rect(hx + (f === 1 ? 1 : -1), hy + 1, 1, 1).fill({ color: col.dark, alpha: 0.5 });
   }
 
-  const dx = stego.targetX - stego.x;
-  const dz = stego.targetZ - stego.z;
-  const dist = Math.sqrt(dx * dx + dz * dz);
-
-  if (dist < 0.1) {
-    stego.state = "idle";
-    stego.idleTimer = STEGO_IDLE_MIN + Math.random() * (STEGO_IDLE_MAX - STEGO_IDLE_MIN);
-    return;
+  // Sitting — flatten body
+  if (c.idleAnim === "sit" && !walking) {
+    g.rect(cx - 3, cy + 2, 6, 1).fill(col.dark);
   }
+}
 
-  const nx = dx / dist;
-  const nz = dz / dist;
-  stego.x += nx * STEGO_SPEED * dt;
-  stego.z += nz * STEGO_SPEED * dt;
-  stego.x = Math.max(0.5, Math.min(ISLAND_SIZE - 0.5, stego.x));
-  stego.z = Math.max(0.5, Math.min(ISLAND_SIZE - 0.5, stego.z));
+// ── Japanese Maple Trees ──────────────────────────────────
+interface MapleTree {
+  x: number; z: number; variant: number;
+}
 
-  if (Math.abs(dx) > 0.05) stego.facing = dx > 0 ? 1 : -1;
-  stego.walkTimer += dt;
+interface MapleLeafParticle {
+  x: number; z: number; life: number; drift: number; speed: number;
+  color: number; groundTimer: number; onGround: boolean;
+  groundX: number; groundZ: number;
+}
+
+const mapleTrees: MapleTree[] = [
+  { x: 3, z: 4, variant: 1 },
+  { x: 5, z: 16, variant: 2 },
+];
+
+const mapleLeaves: MapleLeafParticle[] = [];
+let mapleSpawnTimer = 0;
+
+function spawnMapleLeaves(): void {
+  for (const tree of mapleTrees) {
+    if (Math.random() > 0.4) continue;
+    const cx = tree.x * TILE_PX + TILE_PX / 2;
+    const cz = tree.z * TILE_PX - 6;
+    const colors = [0xcc2828, 0xd44020, 0xe06030, 0xb82020, 0xf08040, 0xd83838];
+    mapleLeaves.push({
+      x: cx + (Math.random() - 0.5) * 12,
+      z: cz + Math.random() * 6,
+      life: 0, drift: (Math.random() - 0.5) * 10,
+      speed: 3 + Math.random() * 4,
+      color: colors[Math.floor(Math.random() * colors.length)]!,
+      groundTimer: 0, onGround: false,
+      groundX: 0, groundZ: 0,
+    });
+  }
+}
+
+function updateMapleLeaves(dt: number): void {
+  mapleSpawnTimer -= dt;
+  if (mapleSpawnTimer <= 0) { spawnMapleLeaves(); mapleSpawnTimer = 0.8 + Math.random() * 1.5; }
+  for (let i = mapleLeaves.length - 1; i >= 0; i--) {
+    const p = mapleLeaves[i]!;
+    if (p.onGround) {
+      p.groundTimer += dt;
+      if (p.groundTimer > 4 + Math.random() * 3) { mapleLeaves.splice(i, 1); }
+      continue;
+    }
+    p.life += dt * 0.3;
+    p.x += Math.sin(p.life * 4 + p.drift) * p.drift * dt;
+    p.z += p.speed * dt;
+    // Land on ground after falling far enough
+    if (p.life >= 0.8) {
+      p.onGround = true;
+      p.groundX = p.x;
+      p.groundZ = p.z;
+    }
+  }
+}
+
+function drawMapleLeaves(g: Graphics): void {
+  for (const p of mapleLeaves) {
+    if (p.onGround) {
+      const fadeOut = Math.max(0, 1 - p.groundTimer / 6);
+      g.rect(Math.round(p.groundX), Math.round(p.groundZ), 2, 1).fill({ color: p.color, alpha: fadeOut * 0.5 });
+    } else {
+      const a = Math.min(1, p.life * 2);
+      const spin = Math.sin(p.life * 6 + p.drift);
+      const w = spin > 0 ? 2 : 1;
+      g.rect(Math.round(p.x), Math.round(p.z), w, 1).fill({ color: p.color, alpha: a * 0.8 });
+    }
+  }
+}
+
+function drawMapleTree(g: Graphics, tree: MapleTree): void {
+  const cx = tree.x * TILE_PX + TILE_PX / 2;
+  const cz = tree.z * TILE_PX + TILE_PX;
+  const now = performance.now() / 1000;
+  const sway = Math.sin(now * 1.0 + tree.variant * 3) * 0.5;
+  const sw = Math.round(sway);
+
+  // Shadow
+  g.ellipse(cx, cz + 1, 5, 2).fill({ color: 0x000000, alpha: 0.12 });
+
+  // Trunk — slender, slightly curved
+  g.rect(cx - 1, cz - 14, 3, 15).fill(0x5a3828);
+  g.rect(cx, cz - 14, 1, 15).fill(0x6a4838);
+  // Bark texture
+  g.rect(cx - 1, cz - 10, 1, 1).fill(0x4a2818);
+  g.rect(cx + 1, cz - 6, 1, 1).fill(0x4a2818);
+
+  // Branches — thin reaching out
+  g.rect(cx - 4, cz - 12, 4, 1).fill(0x5a3828);
+  g.rect(cx + 1, cz - 10, 4, 1).fill(0x5a3828);
+
+  // Canopy — red/orange maple leaves, airy
+  const r1 = 0xcc2828;
+  const r2 = 0xd44020;
+  const r3 = 0xe06838;
+  const r4 = 0xf08848;
+
+  // Main canopy — irregular clumps
+  g.rect(cx - 6 + sw, cz - 18, 12, 5).fill(r1);
+  g.rect(cx - 5 + sw, cz - 19, 10, 1).fill(r2);
+  g.rect(cx - 5 + sw, cz - 13, 10, 1).fill(r1);
+  // Upper
+  g.rect(cx - 4 + sw, cz - 22, 8, 4).fill(r2);
+  g.rect(cx - 3 + sw, cz - 23, 6, 1).fill(r3);
+  // Top tuft
+  g.rect(cx - 2 + sw, cz - 24, 4, 1).fill(r3);
+  g.rect(cx - 1 + sw, cz - 25, 2, 1).fill(r4);
+
+  // Light dappling
+  const r = seededRandom(tree.variant * 777);
+  for (let i = 0; i < 5; i++) {
+    const lx = Math.floor(r() * 10) - 5;
+    const lz = Math.floor(r() * 10) - 20;
+    g.rect(cx + lx + sw, cz + lz, 2, 1).fill({ color: r4, alpha: 0.6 });
+  }
+  // Darker depth
+  for (let i = 0; i < 3; i++) {
+    const lx = Math.floor(r() * 8) - 4;
+    const lz = Math.floor(r() * 8) - 18;
+    g.rect(cx + lx + sw, cz + lz, 2, 2).fill({ color: 0xa01818, alpha: 0.4 });
+  }
 }
 
 // ── Game State ────────────────────────────────────────────
@@ -137,6 +394,89 @@ for (let z = 0; z < ISLAND_SIZE; z++) {
 }
 
 const crops: CropState[] = [];
+const trees: TreeState[] = [
+  { x: 19, z: 5, chopTime: 0, regrowTimer: 0, variant: 1 },
+  { x: 20, z: 9, chopTime: 0, regrowTimer: 0, variant: 2 },
+  { x: 18, z: 13, chopTime: 0, regrowTimer: 0, variant: 3 },
+];
+// Only tree index 1 (middle tree) gets a beehive
+const HIVE_TREE = 1;
+
+// ── Bees ──────────────────────────────────────────────────
+interface Bee {
+  angle: number;   // current angle around hive
+  radius: number;  // orbit distance
+  speed: number;   // angular speed
+  zOff: number;    // vertical wobble offset
+  phase: number;   // wobble phase
+}
+
+const bees: Bee[] = [];
+for (let i = 0; i < 5; i++) {
+  bees.push({
+    angle: Math.random() * Math.PI * 2,
+    radius: 6 + Math.random() * 8,
+    speed: 1.5 + Math.random() * 2,
+    zOff: 0,
+    phase: Math.random() * Math.PI * 2,
+  });
+}
+
+function updateBees(dt: number): void {
+  const now = performance.now() / 1000;
+  for (const b of bees) {
+    b.angle += b.speed * dt;
+    b.zOff = Math.sin(now * 3 + b.phase) * 3;
+  }
+}
+
+function drawHiveAndBees(g: Graphics, tree: TreeState): void {
+  if (tree.chopTime >= CHOP_HITS) return;
+  const cx = tree.x * TILE_PX + TILE_PX / 2;
+  const cz = tree.z * TILE_PX + TILE_PX; // base of tree (matches drawTree)
+  const now = performance.now() / 1000;
+  const sway = Math.sin(now * 1.2 + tree.variant * 2) * 0.6;
+  const sw = Math.round(sway);
+  // Hive hangs from bottom of canopy (canopy bottom is cz - 10)
+  const hiveX = cx + 4 + sw;
+  const hiveZ = cz - 10;
+
+  // Branch stub connecting hive to canopy
+  g.rect(hiveX + 1, hiveZ, 1, 2).fill(0x6a4830);
+  g.rect(hiveX, hiveZ, 3, 1).fill(0x5a3820);
+
+  // Beehive — cute rounded shape hanging below branch
+  const hz = hiveZ + 2;
+  g.rect(hiveX, hz, 4, 4).fill(0xd4a840);
+  g.rect(hiveX - 1, hz + 1, 6, 2).fill(0xd4a840);
+  // Stripes
+  g.rect(hiveX - 1, hz + 1, 6, 1).fill(0xc49830);
+  g.rect(hiveX, hz + 3, 4, 1).fill(0xc49830);
+  // Top round
+  g.rect(hiveX + 1, hz - 1, 2, 1).fill(0xd4a840);
+  // Hole
+  g.rect(hiveX + 1, hz + 2, 2, 1).fill(0x4a3018);
+  // Highlight
+  g.rect(hiveX, hz, 2, 1).fill({ color: 0xf0d060, alpha: 0.5 });
+
+  // Bees orbiting
+  for (const b of bees) {
+    const bx = hiveX + 2 + Math.cos(b.angle) * b.radius;
+    const bz = hz + 2 + Math.sin(b.angle) * b.radius * 0.5 + b.zOff;
+    const ix = Math.round(bx);
+    const iz = Math.round(bz);
+    // Bee body — yellow and black
+    g.rect(ix, iz, 2, 1).fill(0xf0d040);
+    g.rect(ix + 1, iz, 1, 1).fill(0x2a2a2a);
+    // Wings — flicker
+    const wingUp = Math.sin(performance.now() / 1000 * 20 + b.phase) > 0;
+    if (wingUp) {
+      g.rect(ix, iz - 1, 1, 1).fill({ color: 0xf0f0f0, alpha: 0.5 });
+      g.rect(ix + 1, iz - 1, 1, 1).fill({ color: 0xf0f0f0, alpha: 0.3 });
+    }
+  }
+}
+let wood = 0;
 let selectedTool = 0;
 let gameMode: "menu" | "playing" = "menu";
 let clockTime = DAWN_SECONDS;
@@ -232,6 +572,7 @@ const hudTime = el<HTMLSpanElement>("hud-time");
 const hudCoins = el<HTMLSpanElement>("hud-coins");
 const toolbarEl = el<HTMLDivElement>("toolbar");
 const startBtn = el<HTMLButtonElement>("start-btn");
+const dayClock = el<HTMLDivElement>("day-clock");
 const gameContainer = el<HTMLDivElement>("game-container");
 
 // ── Pixel Art Cursors ─────────────────────────────────────
@@ -305,10 +646,23 @@ const cursorSeeds = makePixelCursor((ctx) => {
   px(ctx, 6, 14, 1, 1, "#4e9636");
 }, 6, 14);
 
+const cursorAxe = makePixelCursor((ctx) => {
+  // Handle
+  px(ctx, 3, 4, 1, 10, "#8b6840");
+  px(ctx, 4, 4, 1, 10, "#7a5e36");
+  // Axe head
+  px(ctx, 0, 1, 4, 3, "#a0a0a0");
+  px(ctx, 0, 0, 3, 1, "#c0c0c0");
+  px(ctx, 0, 3, 3, 1, "#888888");
+  // Blade edge
+  px(ctx, 0, 1, 1, 3, "#d0d0d0");
+}, 2, 2);
+
 const toolCursors: Record<ToolId, string> = {
   hoe: cursorHoe,
   water: cursorWater,
   seeds: cursorSeeds,
+  axe: cursorAxe,
 };
 
 let activeCursorTool: ToolId | null = null;
@@ -358,62 +712,116 @@ world.addChild(uiWorldLayer);
 // ── Drawing ───────────────────────────────────────────────
 function drawGrassTile(g: Graphics, tx: number, tz: number): void {
   const rand = seededRandom(tx * 1000 + tz * 37);
-  const baseColors = [COLORS.grass1, COLORS.grass2, COLORS.grass3];
+  const ox = tx * TILE_PX;
+  const oz = tz * TILE_PX;
+  const baseColors = [COLORS.grass1, COLORS.grass2, COLORS.grass3, COLORS.grass4, COLORS.grass5];
   const base = baseColors[Math.floor(rand() * baseColors.length)]!;
-  g.rect(tx * TILE_PX, tz * TILE_PX, TILE_PX, TILE_PX).fill(base);
+  g.rect(ox, oz, TILE_PX, TILE_PX).fill(base);
+
+  // Dithered 2x2 patches for natural variation
+  for (let i = 0; i < 4; i++) {
+    const dx = Math.floor(rand() * 14);
+    const dz = Math.floor(rand() * 14);
+    const shade = baseColors[Math.floor(rand() * baseColors.length)]!;
+    g.rect(ox + dx, oz + dz, 2, 2).fill(shade);
+  }
 
   // Edge dirt — bare patches near island perimeter
   const edgeDist = Math.min(tx, tz, ISLAND_SIZE - 1 - tx, ISLAND_SIZE - 1 - tz);
   if (edgeDist <= 1) {
     const dirtChance = edgeDist === 0 ? 0.7 : 0.3;
-    const dirtCount = edgeDist === 0 ? 4 + Math.floor(rand() * 4) : 2 + Math.floor(rand() * 3);
+    const dirtCount = edgeDist === 0 ? 5 + Math.floor(rand() * 5) : 2 + Math.floor(rand() * 3);
     if (rand() < dirtChance) {
-      const dirtColors = [0x7a6a4e, 0x6e5e42, 0x8a7a5a, 0x5e5038];
+      const dirtColors = [0x7a6a4e, 0x6e5e42, 0x8a7a5a, 0x5e5038, 0x746040];
       for (let i = 0; i < dirtCount; i++) {
         const dx = Math.floor(rand() * 14) + 1;
         const dz = Math.floor(rand() * 14) + 1;
         const dc = dirtColors[Math.floor(rand() * dirtColors.length)]!;
-        const dw = 1 + Math.floor(rand() * 2);
+        const dw = 1 + Math.floor(rand() * 3);
         const dh = 1 + Math.floor(rand() * 2);
-        g.rect(tx * TILE_PX + dx, tz * TILE_PX + dz, dw, dh).fill(dc);
+        g.rect(ox + dx, oz + dz, dw, dh).fill(dc);
       }
     }
     // Sparse pebbles on edges
-    if (edgeDist === 0 && rand() < 0.4) {
+    if (edgeDist === 0 && rand() < 0.5) {
       const px2 = Math.floor(rand() * 12) + 2;
       const pz2 = Math.floor(rand() * 12) + 2;
-      g.rect(tx * TILE_PX + px2, tz * TILE_PX + pz2, 2, 1).fill(0x9a9080);
-      g.rect(tx * TILE_PX + px2 + 4, tz * TILE_PX + pz2 + 3, 1, 1).fill(0x8a8070);
+      g.rect(ox + px2, oz + pz2, 2, 1).fill(0x9a9080);
+      g.rect(ox + px2, oz + pz2 + 1, 1, 1).fill(0x8a8070);
+      if (rand() < 0.5) g.rect(ox + px2 + 5, oz + pz2 + 4, 1, 1).fill(0x9a9080);
     }
   }
 
-  // Grass speckles
-  for (let i = 0; i < 6; i++) {
+  // Grass speckles — more density, varied sizes
+  for (let i = 0; i < 8; i++) {
     const spx = Math.floor(rand() * 14) + 1;
     const spz = Math.floor(rand() * 14) + 1;
-    const shade = rand() > 0.5 ? COLORS.grassLight : COLORS.grassDark;
-    g.rect(tx * TILE_PX + spx, tz * TILE_PX + spz, 1, 1).fill(shade);
+    const r = rand();
+    const shade = r < 0.3 ? COLORS.grassHighlight : r < 0.6 ? COLORS.grassLight : COLORS.grassDark;
+    g.rect(ox + spx, oz + spz, 1, 1).fill(shade);
   }
 
-  // Grass blade tufts (skip on very edge tiles — too dirty)
-  if (edgeDist > 0 && rand() < 0.4) {
+  // Grass blade tufts — animated sway
+  const windNow = performance.now() / 1000;
+  if (edgeDist > 0 && rand() < 0.5) {
     const bx = Math.floor(rand() * 10) + 3;
     const bz = Math.floor(rand() * 8) + 4;
-    g.rect(tx * TILE_PX + bx, tz * TILE_PX + bz, 1, 3).fill(COLORS.grassDark);
-    g.rect(tx * TILE_PX + bx + 2, tz * TILE_PX + bz + 1, 1, 2).fill(COLORS.grassDark);
+    const grassSway = Math.round(Math.sin(windNow * 1.5 + tx * 2 + tz * 3) * 0.8);
+    g.rect(ox + bx, oz + bz + 2, 1, 1).fill(COLORS.grassDark);
+    g.rect(ox + bx + grassSway, oz + bz, 1, 2).fill(COLORS.grassDark);
+    g.rect(ox + bx + 2, oz + bz + 2, 1, 1).fill(COLORS.grassDark);
+    g.rect(ox + bx + 2 + grassSway, oz + bz + 1, 1, 1).fill(COLORS.grassDark);
+    g.rect(ox + bx + grassSway, oz + bz, 1, 1).fill(COLORS.grassLight);
+  }
+  // Second tuft
+  if (edgeDist > 1 && rand() < 0.3) {
+    const bx2 = Math.floor(rand() * 8) + 4;
+    const bz2 = Math.floor(rand() * 6) + 6;
+    const gs2 = Math.round(Math.sin(windNow * 1.3 + tx * 5 + tz) * 0.6);
+    g.rect(ox + bx2, oz + bz2 + 1, 1, 1).fill(COLORS.grassDark);
+    g.rect(ox + bx2 + gs2, oz + bz2, 1, 1).fill(COLORS.grassDark);
+    g.rect(ox + bx2 + gs2, oz + bz2, 1, 1).fill(COLORS.grassLight);
   }
 
-  // Flowers (only interior tiles)
-  if (edgeDist > 1 && rand() < 0.18) {
+  // Small clover/moss patches (interior)
+  if (edgeDist > 2 && rand() < 0.12) {
+    const mx = Math.floor(rand() * 10) + 3;
+    const mz = Math.floor(rand() * 10) + 3;
+    g.rect(ox + mx, oz + mz, 3, 2).fill(0x4a8a30);
+    g.rect(ox + mx + 1, oz + mz - 1, 1, 1).fill(0x4a8a30);
+    g.rect(ox + mx + 1, oz + mz, 1, 1).fill(0x5a9a3a);
+  }
+
+  // Flowers (only interior tiles) — bob gently
+  if (edgeDist > 1 && rand() < 0.2) {
     const fx = Math.floor(rand() * 10) + 3;
     const fz = Math.floor(rand() * 10) + 3;
     const flowerColors = [0xf0e040, 0xe86080, 0x80b0f0, 0xf0a0d0, 0xffa060, 0xf8f8f0];
     const fc = flowerColors[Math.floor(rand() * flowerColors.length)]!;
-    g.rect(tx * TILE_PX + fx, tz * TILE_PX + fz + 2, 1, 2).fill(COLORS.grassDark);
-    g.rect(tx * TILE_PX + fx, tz * TILE_PX + fz, 1, 1).fill(fc);
-    g.rect(tx * TILE_PX + fx - 1, tz * TILE_PX + fz + 1, 1, 1).fill(fc);
-    g.rect(tx * TILE_PX + fx + 1, tz * TILE_PX + fz + 1, 1, 1).fill(fc);
-    g.rect(tx * TILE_PX + fx, tz * TILE_PX + fz + 1, 1, 1).fill(0xf8e860);
+    const flowerBob = Math.round(Math.sin(windNow * 2 + tx * 4 + tz * 2) * 0.5);
+    const flowerSway = Math.round(Math.sin(windNow * 1.6 + tx * 3 + tz * 5) * 0.6);
+    // Stem
+    g.rect(ox + fx, oz + fz + 2, 1, 3).fill(COLORS.grassDark);
+    // Leaf on stem
+    g.rect(ox + fx + 1, oz + fz + 3, 1, 1).fill(0x4e9636);
+    // Petals (cross pattern) — sway and bob
+    const fpx = ox + fx + flowerSway;
+    const fpz = oz + fz + flowerBob;
+    g.rect(fpx, fpz, 1, 1).fill(fc);
+    g.rect(fpx - 1, fpz + 1, 1, 1).fill(fc);
+    g.rect(fpx + 1, fpz + 1, 1, 1).fill(fc);
+    g.rect(fpx, fpz + 1, 1, 1).fill(0xf8e860); // center
+    g.rect(fpx, fpz - 1, 1, 1).fill({ color: fc, alpha: 0.6 });
+  }
+
+  // Second flower chance (different position, smaller)
+  if (edgeDist > 3 && rand() < 0.08) {
+    const fx = Math.floor(rand() * 8) + 4;
+    const fz = Math.floor(rand() * 8) + 4;
+    const fc2 = [0xe86080, 0x80b0f0, 0xf0a0d0][Math.floor(rand() * 3)]!;
+    g.rect(ox + fx, oz + fz + 1, 1, 2).fill(COLORS.grassDark);
+    g.rect(ox + fx, oz + fz, 1, 1).fill(fc2);
+    g.rect(ox + fx - 1, oz + fz, 1, 1).fill({ color: fc2, alpha: 0.5 });
   }
 }
 
@@ -422,6 +830,7 @@ function isOnIsland(x: number, z: number): boolean {
 }
 
 function drawIslandEdge(g: Graphics): void {
+  // Draw cliff faces with depth gradient
   for (let x = -1; x <= ISLAND_SIZE; x++) {
     for (let z = -1; z <= ISLAND_SIZE; z++) {
       if (isOnIsland(x, z)) continue;
@@ -431,23 +840,52 @@ function drawIslandEdge(g: Graphics): void {
 
       const px = x * TILE_PX;
       const pz = z * TILE_PX;
+      const rand = seededRandom(x * 500 + z * 77);
 
       if (z >= ISLAND_SIZE || (z >= 0 && !isOnIsland(x, z))) {
+        // Cliff face below island — layered gradient
         g.rect(px, pz, TILE_PX, TILE_PX).fill(COLORS.cliffFace);
-        if (isOnIsland(x, z - 1)) g.rect(px, pz, TILE_PX, 3).fill(COLORS.cliffTop);
-        const rand = seededRandom(x * 500 + z * 77);
-        for (let i = 0; i < 3; i++) {
-          const lx = Math.floor(rand() * 12) + 2;
-          const lz = Math.floor(rand() * 12) + 2;
-          g.rect(px + lx, pz + lz, 2, 1).fill(COLORS.cliffShadow);
+        // Top lip where grass meets cliff
+        if (isOnIsland(x, z - 1)) {
+          g.rect(px, pz, TILE_PX, 2).fill(COLORS.cliffTop);
+          g.rect(px, pz + 2, TILE_PX, 2).fill(COLORS.cliffMid);
+          // Grass overhang pixels
+          if (rand() < 0.6) {
+            g.rect(px + Math.floor(rand() * 12) + 2, pz, 2, 1).fill(COLORS.grassEdge);
+          }
         }
+        // Rock cracks and texture
+        for (let i = 0; i < 4; i++) {
+          const lx = Math.floor(rand() * 12) + 2;
+          const lz = Math.floor(rand() * 10) + 3;
+          g.rect(px + lx, pz + lz, 2, 1).fill(COLORS.cliffShadow);
+          if (rand() < 0.4) g.rect(px + lx + 1, pz + lz + 1, 1, 1).fill(COLORS.cliffDeep);
+        }
+        // Moss patches on cliff
+        if (rand() < 0.3) {
+          const mx = Math.floor(rand() * 10) + 3;
+          const mz = Math.floor(rand() * 8) + 4;
+          g.rect(px + mx, pz + mz, 2, 2).fill(COLORS.cliffMoss);
+          g.rect(px + mx + 1, pz + mz, 1, 1).fill(0x4a6838);
+        }
+        // Gradient darkening toward bottom
+        g.rect(px, pz + TILE_PX - 3, TILE_PX, 3).fill({ color: COLORS.cliffDeep, alpha: 0.3 });
       } else {
         g.rect(px, pz, TILE_PX, TILE_PX).fill(COLORS.cliffFace);
-        if (isOnIsland(x, z + 1)) g.rect(px, pz + TILE_PX - 3, TILE_PX, 3).fill(COLORS.cliffTop);
+        if (isOnIsland(x, z + 1)) {
+          g.rect(px, pz + TILE_PX - 2, TILE_PX, 2).fill(COLORS.cliffTop);
+          g.rect(px, pz + TILE_PX - 4, TILE_PX, 2).fill(COLORS.cliffMid);
+        }
+        for (let i = 0; i < 3; i++) {
+          const lx = Math.floor(rand() * 12) + 2;
+          const lz = Math.floor(rand() * 10) + 2;
+          g.rect(px + lx, pz + lz, 2, 1).fill(COLORS.cliffShadow);
+        }
       }
     }
   }
 
+  // Grass edge highlight — bright lip
   for (let x = 0; x < ISLAND_SIZE; x++) {
     if (!isOnIsland(x, -1)) g.rect(x * TILE_PX, 0, TILE_PX, 1).fill(COLORS.grassEdge);
     if (!isOnIsland(x, ISLAND_SIZE)) g.rect(x * TILE_PX, ISLAND_SIZE * TILE_PX - 1, TILE_PX, 1).fill(COLORS.grassEdge);
@@ -456,27 +894,55 @@ function drawIslandEdge(g: Graphics): void {
     if (!isOnIsland(-1, z)) g.rect(0, z * TILE_PX, 1, TILE_PX).fill(COLORS.grassEdge);
     if (!isOnIsland(ISLAND_SIZE, z)) g.rect(ISLAND_SIZE * TILE_PX - 1, z * TILE_PX, 1, TILE_PX).fill(COLORS.grassEdge);
   }
+
+  // Drop shadow beneath the island
+  const shadowAlpha = 0.12;
+  for (let x = -1; x <= ISLAND_SIZE; x++) {
+    const sx = x * TILE_PX;
+    g.rect(sx, ISLAND_SIZE * TILE_PX + TILE_PX, TILE_PX, 4).fill({ color: 0x000000, alpha: shadowAlpha });
+    g.rect(sx, ISLAND_SIZE * TILE_PX + TILE_PX + 4, TILE_PX, 4).fill({ color: 0x000000, alpha: shadowAlpha * 0.5 });
+  }
 }
 
 function drawFarmlandTile(g: Graphics, tx: number, tz: number, watered: boolean): void {
+  const ox = tx * TILE_PX;
+  const oz = tz * TILE_PX;
   const color = watered ? COLORS.farmlandWet : COLORS.farmland;
   const dark = watered ? COLORS.farmlandWetDark : COLORS.farmlandDark;
-  g.rect(tx * TILE_PX, tz * TILE_PX, TILE_PX, TILE_PX).fill(color);
+  g.rect(ox, oz, TILE_PX, TILE_PX).fill(color);
 
+  // Furrows with ridge highlights
   for (let row = 2; row < TILE_PX; row += 4) {
-    g.rect(tx * TILE_PX + 1, tz * TILE_PX + row, TILE_PX - 2, 1).fill(dark);
+    g.rect(ox + 1, oz + row, TILE_PX - 2, 1).fill(dark);
     const ridgeColor = watered ? 0x5a4430 : 0x8a6e4e;
-    g.rect(tx * TILE_PX + 1, tz * TILE_PX + row - 1, TILE_PX - 2, 1).fill(ridgeColor);
+    g.rect(ox + 1, oz + row - 1, TILE_PX - 2, 1).fill(ridgeColor);
+    // Ridge highlight on top edge
+    const highlight = watered ? COLORS.farmlandWetSheen : COLORS.farmlandLight;
+    g.rect(ox + 2, oz + row - 2, TILE_PX - 4, 1).fill({ color: highlight, alpha: 0.3 });
+  }
+
+  // Soil texture speckles
+  const rand = seededRandom(tx * 333 + tz * 19);
+  for (let i = 0; i < 3; i++) {
+    const dx = Math.floor(rand() * 12) + 2;
+    const dz = Math.floor(rand() * 12) + 2;
+    g.rect(ox + dx, oz + dz, 1, 1).fill({ color: COLORS.farmlandLight, alpha: 0.3 });
   }
 
   if (watered) {
-    const rand = seededRandom(tx * 333 + tz * 19);
-    for (let i = 0; i < 3; i++) {
+    // Water sheen droplets
+    for (let i = 0; i < 5; i++) {
       const dx = Math.floor(rand() * 12) + 2;
       const dz = Math.floor(rand() * 12) + 2;
-      g.rect(tx * TILE_PX + dx, tz * TILE_PX + dz, 1, 1).fill(0x6aaad0);
+      g.rect(ox + dx, oz + dz, 1, 1).fill({ color: 0x6aaad0, alpha: 0.6 });
     }
+    // Subtle wet sheen across surface
+    g.rect(ox + 2, oz + 1, TILE_PX - 4, TILE_PX - 2).fill({ color: 0x4a6a8a, alpha: 0.08 });
   }
+
+  // Border edge — grass transition hint
+  g.rect(ox, oz, 1, TILE_PX).fill({ color: COLORS.farmlandDark, alpha: 0.4 });
+  g.rect(ox + TILE_PX - 1, oz, 1, TILE_PX).fill({ color: COLORS.farmlandDark, alpha: 0.4 });
 }
 
 function drawCrop(g: Graphics, crop: CropState): void {
@@ -484,137 +950,201 @@ function drawCrop(g: Graphics, crop: CropState): void {
   const progress = crop.growth / def.growDays;
   const cx = crop.x * TILE_PX;
   const cz = crop.z * TILE_PX;
+  // Gentle sway
+  const now = performance.now() / 1000;
+  const swayAmt = progress < 0.3 ? 0.2 : progress < 0.7 ? 0.35 : 0.6;
+  const sway = Math.sin(now * 1.8 + crop.x * 3 + crop.z * 7) * swayAmt;
+  const sw = Math.round(sway);
 
   if (progress < 0.3) {
-    g.rect(cx + 7, cz + 10, 2, 3).fill(COLORS.cropGreenDark);
-    g.rect(cx + 6, cz + 9, 4, 2).fill(COLORS.cropGreen);
-    g.rect(cx + 7, cz + 8, 2, 1).fill(COLORS.cropGreen);
+    // Seedling — tiny sprout with gentle sway
+    g.rect(cx + 7, cz + 11, 2, 3).fill(COLORS.cropGreenDark);
+    g.rect(cx + 6 + sw, cz + 10, 4, 2).fill(COLORS.cropGreen);
+    g.rect(cx + 7 + sw, cz + 9, 2, 1).fill(COLORS.cropGreenLight);
+    g.rect(cx + 9 + sw, cz + 10, 1, 1).fill(COLORS.cropGreen);
   } else if (progress < 0.7) {
-    g.rect(cx + 7, cz + 5, 2, 8).fill(COLORS.cropGreenDark);
-    g.rect(cx + 4, cz + 5, 3, 3).fill(COLORS.cropGreen);
-    g.rect(cx + 9, cz + 6, 3, 3).fill(COLORS.cropGreen);
-    g.rect(cx + 6, cz + 8, 4, 2).fill(COLORS.cropGreen);
+    // Growing — taller with leaves
+    g.rect(cx + 7, cz + 5, 2, 9).fill(COLORS.cropGreenDark);
+    g.rect(cx + 4 + sw, cz + 5, 3, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 4 + sw, cz + 5, 2, 1).fill(COLORS.cropGreenLight);
+    g.rect(cx + 9 + sw, cz + 6, 3, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 10 + sw, cz + 6, 2, 1).fill(COLORS.cropGreenLight);
+    g.rect(cx + 6, cz + 9, 4, 2).fill(COLORS.cropGreen);
+    g.rect(cx + 6, cz + 13, 4, 1).fill({ color: 0x000000, alpha: 0.1 });
   } else if (progress < 1) {
-    g.rect(cx + 7, cz + 3, 2, 10).fill(COLORS.cropGreenDark);
-    g.rect(cx + 3, cz + 4, 4, 4).fill(COLORS.cropGreen);
-    g.rect(cx + 9, cz + 3, 4, 4).fill(COLORS.cropGreen);
-    g.rect(cx + 5, cz + 7, 6, 3).fill(COLORS.cropGreen);
+    // Tall — nearly ready, beginning to show wheat tips
+    g.rect(cx + 7 + sw, cz + 3, 2, 11).fill(COLORS.cropGreenDark);
+    g.rect(cx + 3 + sw, cz + 4, 4, 4).fill(COLORS.cropGreen);
+    g.rect(cx + 3 + sw, cz + 4, 3, 1).fill(COLORS.cropGreenLight);
+    g.rect(cx + 9 + sw, cz + 3, 4, 4).fill(COLORS.cropGreen);
+    g.rect(cx + 10 + sw, cz + 3, 3, 1).fill(COLORS.cropGreenLight);
+    g.rect(cx + 5 + sw, cz + 7, 6, 3).fill(COLORS.cropGreen);
+    // Early wheat buds
+    g.rect(cx + 5 + sw, cz + 2, 2, 2).fill(COLORS.cropBrown);
+    g.rect(cx + 10 + sw, cz + 1, 2, 2).fill(COLORS.cropBrown);
+    g.rect(cx + 6 + sw, cz + 13, 4, 1).fill({ color: 0x000000, alpha: 0.1 });
   } else {
-    // Harvestable — golden wheat
-    g.rect(cx + 7, cz + 3, 2, 10).fill(COLORS.cropGreenDark);
-    g.rect(cx + 3, cz + 4, 4, 4).fill(COLORS.cropGreen);
-    g.rect(cx + 9, cz + 3, 4, 4).fill(COLORS.cropGreen);
-    g.rect(cx + 5, cz + 7, 6, 3).fill(COLORS.cropGreen);
-    g.rect(cx + 4, cz + 2, 4, 3).fill(COLORS.cropYellow);
-    g.rect(cx + 5, cz + 2, 2, 1).fill(0xc4b030);
-    g.rect(cx + 9, cz + 1, 4, 3).fill(COLORS.cropYellow);
-    g.rect(cx + 10, cz + 1, 2, 1).fill(0xc4b030);
+    // Harvestable — golden wheat with full detail
+    g.rect(cx + 7 + sw, cz + 3, 2, 11).fill(COLORS.cropGreenDark);
+    g.rect(cx + 3 + sw, cz + 5, 4, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 3 + sw, cz + 5, 3, 1).fill(COLORS.cropGreenLight);
+    g.rect(cx + 9 + sw, cz + 4, 4, 3).fill(COLORS.cropGreen);
+    g.rect(cx + 10 + sw, cz + 4, 3, 1).fill(COLORS.cropGreenLight);
+    g.rect(cx + 5 + sw, cz + 7, 6, 3).fill(COLORS.cropGreen);
+    // Golden wheat heads
+    g.rect(cx + 4 + sw, cz + 2, 4, 3).fill(COLORS.cropYellow);
+    g.rect(cx + 5 + sw, cz + 1, 2, 1).fill(COLORS.cropYellowLight);
+    g.rect(cx + 4 + sw, cz + 4, 1, 1).fill(0xc4b030); // shadow
+    g.rect(cx + 9 + sw, cz + 1, 4, 3).fill(COLORS.cropYellow);
+    g.rect(cx + 10 + sw, cz + 0, 2, 1).fill(COLORS.cropYellowLight);
+    g.rect(cx + 9 + sw, cz + 3, 1, 1).fill(0xc4b030);
+    // Wheat whiskers
+    g.rect(cx + 4 + sw, cz + 1, 1, 1).fill({ color: COLORS.cropYellow, alpha: 0.6 });
+    g.rect(cx + 13 + sw, cz + 0, 1, 1).fill({ color: COLORS.cropYellow, alpha: 0.6 });
+    // Ground shadow
+    g.rect(cx + 5, cz + 13, 6, 1).fill({ color: 0x000000, alpha: 0.12 });
   }
 
   if (crop.watered) {
-    g.rect(cx + 13, cz + 1, 2, 2).fill({ color: COLORS.water, alpha: 0.7 });
+    g.rect(cx + 13, cz + 1, 2, 2).fill({ color: COLORS.water, alpha: 0.6 });
+    g.rect(cx + 14, cz + 1, 1, 1).fill({ color: 0xa0d4f0, alpha: 0.4 });
   }
 }
 
-let stegoBlinkTimer = 0;
-let stegoBlinking = false;
-
-function drawStego(g: Graphics): void {
-  const px = stego.x * TILE_PX;
-  const pz = stego.z * TILE_PX;
-  const f = stego.facing; // 1 = right, -1 = left
-  const bob = stego.state === "walking" ? Math.sin(stego.walkTimer * 6) * 0.4 : 0;
-  const legSwing = stego.state === "walking" ? Math.sin(stego.walkTimer * 8) * 1 : 0;
+function drawTree(g: Graphics, tree: TreeState): void {
+  if (tree.chopTime >= CHOP_HITS) return; // chopped, don't draw
+  const cx = tree.x * TILE_PX + TILE_PX / 2;
+  const cz = tree.z * TILE_PX + TILE_PX;
   const now = performance.now() / 1000;
-  // Tail wag — gentle sine oscillation
-  const tailWag = Math.sin(now * 2.5) * 1.2;
-  // Blink logic
-  stegoBlinkTimer -= 1 / 60;
-  if (stegoBlinkTimer <= 0) {
-    stegoBlinking = !stegoBlinking;
-    stegoBlinkTimer = stegoBlinking ? 0.12 : 2.5 + Math.random() * 3;
-  }
-
-  // Center the sprite on the tile position
-  const cx = px + 8;
-  const cy = pz + 8;
-
-  // Helper to draw mirrored around center
-  const r = (ox: number, oy: number, w: number, h: number, color: number, alpha = 1) => {
-    g.rect(cx + ox * f, cy + oy, w, h).fill(alpha < 1 ? { color, alpha } : color);
-  };
+  const sway = Math.sin(now * 1.2 + tree.variant * 2) * 0.6;
+  const sw = Math.round(sway);
 
   // Shadow
-  g.ellipse(cx, cy + 7, 7, 2).fill({ color: 0x000000, alpha: 0.15 });
+  g.ellipse(cx, cz + 1, 6, 2).fill({ color: 0x000000, alpha: 0.15 });
 
-  // Legs (4 stubby legs)
-  const legColor = 0x5a9a40;
-  const legDark = 0x4a8234;
-  r(-5, 4 + legSwing * 0.3, 2, 3, legColor);
-  r(-5, 6 + legSwing * 0.3, 2, 1, legDark);
-  r(-2, 4 - legSwing * 0.3, 2, 3, legColor);
-  r(-2, 6 - legSwing * 0.3, 2, 1, legDark);
-  r(2, 4 + legSwing * 0.2, 2, 3, legColor);
-  r(2, 6 + legSwing * 0.2, 2, 1, legDark);
-  r(5, 4 - legSwing * 0.2, 2, 3, legColor);
-  r(5, 6 - legSwing * 0.2, 2, 1, legDark);
+  // Trunk
+  g.rect(cx - 2, cz - 12, 4, 13).fill(0x6a4830);
+  g.rect(cx - 1, cz - 12, 2, 13).fill(0x7a5a3a);
+  // Trunk highlight
+  g.rect(cx, cz - 10, 1, 8).fill({ color: 0x8a6a4a, alpha: 0.5 });
+  // Bark texture
+  g.rect(cx - 2, cz - 8, 1, 1).fill(0x5a3820);
+  g.rect(cx + 1, cz - 5, 1, 1).fill(0x5a3820);
 
-  // Body — big rounded oval
-  const bodyColor = 0x6ebc4e;
-  const bodyDark = 0x5aa63e;
-  g.rect(cx - 6, cy - 2 + bob, 12, 6).fill(bodyColor);
-  g.rect(cx - 5, cy - 3 + bob, 10, 1).fill(bodyColor);
-  g.rect(cx - 5, cy + 4 + bob, 10, 1).fill(bodyDark);
+  // Canopy — layered circles
+  const leafDark = 0x2e7a1e;
+  const leafMid = 0x3e9a2e;
+  const leafLight = 0x5aba3e;
+  const leafHighlight = 0x70cc50;
 
-  // Back hump (stego's arched back)
-  g.rect(cx - 4, cy - 4 + bob, 8, 2).fill(bodyColor);
-  g.rect(cx - 2, cy - 5 + bob, 4, 1).fill(bodyColor);
+  // Bottom canopy layer
+  g.rect(cx - 7 + sw, cz - 16, 14, 6).fill(leafDark);
+  g.rect(cx - 6 + sw, cz - 17, 12, 1).fill(leafDark);
+  g.rect(cx - 6 + sw, cz - 10, 12, 1).fill(leafDark);
 
-  // Plates along the back (5 triangular plates)
-  const plateColor = 0x8ad468;
-  const plateDark = 0x5eaa3e;
-  // Plate positions along the spine
-  for (let i = 0; i < 5; i++) {
-    const plateX = cx - 4 + i * 2;
-    const plateY = cy - 5 + bob - (i < 2 || i > 3 ? 0 : 1);
-    g.rect(plateX, plateY - 2, 2, 2).fill(plateColor);
-    g.rect(plateX, plateY, 2, 1).fill(plateDark);
-    // Tiny tip
-    if (i === 1 || i === 2 || i === 3) {
-      g.rect(plateX, plateY - 3, 1, 1).fill(plateColor);
+  // Middle canopy
+  g.rect(cx - 6 + sw, cz - 20, 12, 6).fill(leafMid);
+  g.rect(cx - 5 + sw, cz - 21, 10, 1).fill(leafMid);
+
+  // Top canopy
+  g.rect(cx - 4 + sw, cz - 23, 8, 4).fill(leafLight);
+  g.rect(cx - 3 + sw, cz - 24, 6, 1).fill(leafLight);
+  g.rect(cx - 2 + sw, cz - 25, 4, 1).fill(leafHighlight);
+
+  // Leaf highlights (dappled light)
+  const r = seededRandom(tree.variant * 999);
+  for (let i = 0; i < 6; i++) {
+    const lx = Math.floor(r() * 10) - 5;
+    const lz = Math.floor(r() * 10) - 20;
+    g.rect(cx + lx + sw, cz + lz, 2, 1).fill({ color: leafHighlight, alpha: 0.6 });
+  }
+  // Dark depth spots
+  for (let i = 0; i < 4; i++) {
+    const lx = Math.floor(r() * 10) - 5;
+    const lz = Math.floor(r() * 8) - 18;
+    g.rect(cx + lx + sw, cz + lz, 2, 2).fill({ color: 0x1e6a10, alpha: 0.4 });
+  }
+
+  // Chop damage indicator
+  if (tree.chopTime > 0 && tree.chopTime < CHOP_HITS) {
+    // Axe marks on trunk
+    for (let i = 0; i < tree.chopTime; i++) {
+      g.rect(cx - 2, cz - 6 + i * 3, 3, 1).fill(0xc4a870);
+      g.rect(cx - 2, cz - 5 + i * 3, 2, 1).fill(0x4a2810);
     }
   }
-
-  // Tail — extends behind with wag
-  const tailX = f === 1 ? cx - 7 : cx + 7;
-  const tw = Math.round(tailWag);
-  g.rect(tailX, cy + bob + tw, 3, 2).fill(bodyColor);
-  g.rect(tailX + (f === 1 ? -2 : 2), cy + 1 + bob + tw, 2, 1).fill(bodyDark);
-  // Tail tip
-  g.rect(tailX + (f === 1 ? -3 : 3), cy + bob + tw + 1, 2, 1).fill(bodyDark);
-  // Tail spikes
-  g.rect(tailX + (f === 1 ? -1 : 2), cy - 1 + bob + tw, 1, 1).fill(plateColor);
-  g.rect(tailX + (f === 1 ? -2 : 3), cy + bob + tw, 1, 1).fill(plateColor);
-
-  // Head — small, extends forward
-  const headX = f === 1 ? cx + 6 : cx - 8;
-  g.rect(headX, cy - 2 + bob, 3, 4).fill(bodyColor);
-  g.rect(headX + (f === 1 ? 3 : -1), cy - 1 + bob, 1, 3).fill(bodyColor);
-  // Snout
-  g.rect(headX + (f === 1 ? 3 : -1), cy + bob, 1, 2).fill(bodyDark);
-
-  // Eye (blinks)
-  const eyeX = headX + (f === 1 ? 2 : 0);
-  if (!stegoBlinking) {
-    g.rect(eyeX, cy - 1 + bob, 1, 1).fill(0x2a2a2a);
-  } else {
-    // Closed eye — horizontal line
-    g.rect(eyeX, cy - 1 + bob, 1, 1).fill(bodyDark);
-  }
-
-  // Belly highlight
-  g.rect(cx - 4, cy + 2 + bob, 8, 1).fill({ color: 0x8edc5e, alpha: 0.5 });
 }
+
+function drawTreeStump(g: Graphics, tree: TreeState): void {
+  if (tree.chopTime < CHOP_HITS) return;
+  const cx = tree.x * TILE_PX + TILE_PX / 2;
+  const cz = tree.z * TILE_PX + TILE_PX;
+
+  // Shadow
+  g.ellipse(cx, cz + 1, 4, 1).fill({ color: 0x000000, alpha: 0.1 });
+  // Stump
+  g.rect(cx - 3, cz - 3, 6, 4).fill(0x6a4830);
+  g.rect(cx - 2, cz - 3, 4, 1).fill(0x8a6a4a);
+  // Tree rings on top
+  g.rect(cx - 2, cz - 3, 4, 1).fill(0x9a7a50);
+  g.rect(cx - 1, cz - 3, 2, 1).fill(0xaa8a5a);
+}
+
+// Falling leaf particles from trees
+interface LeafParticle {
+  x: number; z: number; life: number; drift: number; speed: number; color: number;
+}
+const leafParticles: LeafParticle[] = [];
+let leafSpawnTimer = 0;
+
+function spawnLeafParticles(): void {
+  for (const tree of trees) {
+    if (tree.chopTime >= CHOP_HITS) continue;
+    if (Math.random() > 0.3) continue;
+    const cx = tree.x * TILE_PX + TILE_PX / 2;
+    const cz = tree.z * TILE_PX - 8;
+    leafParticles.push({
+      x: cx + (Math.random() - 0.5) * 10,
+      z: cz + Math.random() * 6,
+      life: 0,
+      drift: (Math.random() - 0.5) * 8,
+      speed: 4 + Math.random() * 6,
+      color: [0x5aba3e, 0x3e9a2e, 0x70cc50, 0x90d86a][Math.floor(Math.random() * 4)]!,
+    });
+  }
+}
+
+function updateLeafParticles(dt: number): void {
+  leafSpawnTimer -= dt;
+  if (leafSpawnTimer <= 0) { spawnLeafParticles(); leafSpawnTimer = 1.5 + Math.random() * 2; }
+  for (let i = leafParticles.length - 1; i >= 0; i--) {
+    const p = leafParticles[i]!;
+    p.life += dt * 0.4;
+    p.x += Math.sin(p.life * 3 + p.drift) * p.drift * dt;
+    p.z += p.speed * dt;
+    if (p.life >= 1) leafParticles.splice(i, 1);
+  }
+}
+
+function drawLeafParticles(g: Graphics): void {
+  for (const p of leafParticles) {
+    const a = 1 - p.life;
+    g.rect(Math.round(p.x), Math.round(p.z), 1, 1).fill({ color: p.color, alpha: a * 0.7 });
+  }
+}
+
+function updateTrees(dt: number): void {
+  for (const tree of trees) {
+    if (tree.chopTime >= CHOP_HITS) {
+      tree.regrowTimer -= dt;
+      if (tree.regrowTimer <= 0) {
+        tree.chopTime = 0;
+        tree.regrowTimer = 0;
+      }
+    }
+  }
+}
+
 
 function drawHighlight(g: Graphics, tx: number, tz: number): void {
   const x = tx * TILE_PX;
@@ -622,6 +1152,7 @@ function drawHighlight(g: Graphics, tx: number, tz: number): void {
   const tool = TOOLS[selectedTool]!.id;
   const color = tool === "hoe" ? COLORS.highlightHoe
     : tool === "water" ? COLORS.highlightWater
+    : tool === "axe" ? COLORS.highlightHoe
     : COLORS.highlightSeeds;
 
   // Filled tint
@@ -641,6 +1172,115 @@ const uiGfx = new Graphics();
 groundLayer.addChild(groundGfx);
 objectLayer.addChild(objectGfx);
 uiWorldLayer.addChild(uiGfx);
+
+// ── Ambient Particles (pollen/dust motes) ─────────────────
+interface Mote {
+  x: number;
+  z: number;
+  speed: number;
+  drift: number;
+  phase: number;
+  size: number;
+  alpha: number;
+}
+
+const motes: Mote[] = [];
+for (let i = 0; i < 20; i++) {
+  motes.push({
+    x: Math.random() * ISLAND_SIZE * TILE_PX,
+    z: Math.random() * ISLAND_SIZE * TILE_PX,
+    speed: 2 + Math.random() * 4,
+    drift: Math.random() * Math.PI * 2,
+    phase: Math.random() * Math.PI * 2,
+    size: 1,
+    alpha: 0.15 + Math.random() * 0.25,
+  });
+}
+
+function updateMotes(dt: number): void {
+  const now = performance.now() / 1000;
+  for (const m of motes) {
+    m.x += Math.sin(m.drift + now * 0.3) * m.speed * dt;
+    m.z -= m.speed * dt * 0.4;
+    // Wrap around
+    if (m.z < -4) { m.z = ISLAND_SIZE * TILE_PX + 4; m.x = Math.random() * ISLAND_SIZE * TILE_PX; }
+    if (m.x < -4) m.x = ISLAND_SIZE * TILE_PX + 4;
+    if (m.x > ISLAND_SIZE * TILE_PX + 4) m.x = -4;
+  }
+}
+
+function drawMotes(g: Graphics): void {
+  const now = performance.now() / 1000;
+  for (const m of motes) {
+    const flicker = 0.7 + Math.sin(now * 2 + m.phase) * 0.3;
+    g.rect(Math.round(m.x), Math.round(m.z), m.size, m.size)
+      .fill({ color: 0xf8f0d0, alpha: m.alpha * flicker });
+  }
+}
+
+// ── Butterflies ────────────────────────────────────────────
+interface Butterfly {
+  x: number;
+  z: number;
+  tx: number;
+  tz: number;
+  color: number;
+  wingPhase: number;
+  speed: number;
+  idleTimer: number;
+}
+
+const butterflies: Butterfly[] = [];
+const butterflyColors = [0xf0e040, 0xe86080, 0x80b0f0, 0xf0a0d0, 0xffa060, 0xf8f8f0];
+for (let i = 0; i < 4; i++) {
+  const x = 4 + Math.random() * (ISLAND_SIZE - 8);
+  const z = 4 + Math.random() * (ISLAND_SIZE - 8);
+  butterflies.push({
+    x: x * TILE_PX, z: z * TILE_PX,
+    tx: x * TILE_PX, tz: z * TILE_PX,
+    color: butterflyColors[Math.floor(Math.random() * butterflyColors.length)]!,
+    wingPhase: Math.random() * Math.PI * 2,
+    speed: 15 + Math.random() * 10,
+    idleTimer: 1 + Math.random() * 3,
+  });
+}
+
+function updateButterflies(dt: number): void {
+  for (const b of butterflies) {
+    const dx = b.tx - b.x;
+    const dz = b.tz - b.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < 2) {
+      b.idleTimer -= dt;
+      if (b.idleTimer <= 0) {
+        b.tx = (4 + Math.random() * (ISLAND_SIZE - 8)) * TILE_PX;
+        b.tz = (4 + Math.random() * (ISLAND_SIZE - 8)) * TILE_PX;
+        b.idleTimer = 2 + Math.random() * 4;
+      }
+    } else {
+      b.x += (dx / dist) * b.speed * dt;
+      b.z += (dz / dist) * b.speed * dt;
+    }
+    b.wingPhase += dt * 12;
+  }
+}
+
+function drawButterflies(g: Graphics): void {
+  for (const b of butterflies) {
+    const wing = Math.sin(b.wingPhase);
+    const wingW = Math.max(1, Math.round(Math.abs(wing) * 2));
+    const bx = Math.round(b.x);
+    const bz = Math.round(b.z);
+    // Body
+    g.rect(bx, bz, 1, 2).fill(0x2a2a2a);
+    // Wings — flap open and closed
+    g.rect(bx - wingW, bz, wingW, 1).fill({ color: b.color, alpha: 0.8 });
+    g.rect(bx + 1, bz, wingW, 1).fill({ color: b.color, alpha: 0.8 });
+    // Lower wings slightly offset
+    g.rect(bx - wingW, bz + 1, Math.max(1, wingW - 1), 1).fill({ color: b.color, alpha: 0.5 });
+    g.rect(bx + 1, bz + 1, Math.max(1, wingW - 1), 1).fill({ color: b.color, alpha: 0.5 });
+  }
+}
 
 function renderWorld(): void {
   groundGfx.clear();
@@ -667,8 +1307,16 @@ function renderWorld(): void {
   }
 
   for (const crop of crops) drawCrop(objectGfx, crop);
+  for (const tree of trees) drawTreeStump(objectGfx, tree);
+  for (const tree of trees) drawTree(objectGfx, tree);
+  if (trees[HIVE_TREE]) drawHiveAndBees(objectGfx, trees[HIVE_TREE]!);
+  for (const mt of mapleTrees) drawMapleTree(objectGfx, mt);
+  drawMapleLeaves(objectGfx);
+  drawLeafParticles(objectGfx);
   drawSplashes(objectGfx);
-  drawStego(objectGfx);
+  for (const c of chickens) drawChicken(objectGfx, c);
+  drawButterflies(objectGfx);
+  drawMotes(objectGfx);
 
   if (hoveredTile && hoveredTile.x >= 0 && hoveredTile.x < ISLAND_SIZE && hoveredTile.z >= 0 && hoveredTile.z < ISLAND_SIZE) {
     drawHighlight(uiGfx, hoveredTile.x, hoveredTile.z);
@@ -762,18 +1410,69 @@ function useTool(): void {
         }
       }
       break;
+
+    case "axe": {
+      const tree = trees.find((t) => t.x === x && t.z === z && t.chopTime < CHOP_HITS);
+      if (tree) {
+        tree.chopTime += 1;
+        if (tree.chopTime >= CHOP_HITS) {
+          wood += 3;
+          tree.regrowTimer = TREE_REGROW_SECONDS;
+        }
+      }
+      break;
+    }
   }
 
   updateHud();
 }
 
 // ── HUD ───────────────────────────────────────────────────
+function getTimePhase(hour: number): { icon: string; label: string; color: string } {
+  if (hour < 1.5) return { icon: "🌙", label: "Night", color: "#6a6aaa" };
+  if (hour < 3) return { icon: "🌅", label: "Dawn", color: "#d4705a" };
+  if (hour < 5) return { icon: "☀️", label: "Morning", color: "#f8d878" };
+  if (hour < 18) return { icon: "☀️", label: "Day", color: "#ffe066" };
+  if (hour < 20) return { icon: "☀️", label: "Afternoon", color: "#f8c040" };
+  if (hour < 21.5) return { icon: "🌇", label: "Sunset", color: "#e88040" };
+  if (hour < 22.5) return { icon: "🌆", label: "Dusk", color: "#8a3060" };
+  return { icon: "🌙", label: "Night", color: "#6a6aaa" };
+}
+
+function updateDayClock(): void {
+  const hour = (clockTime / 3600) % 24;
+  const phase = getTimePhase(hour);
+  const progress = (hour / 24) * 100;
+
+  dayClock.textContent = "";
+
+  const icon = document.createElement("span");
+  icon.className = "clock-icon";
+  icon.textContent = phase.icon;
+  dayClock.appendChild(icon);
+
+  const bar = document.createElement("div");
+  bar.className = "clock-bar";
+  const fill = document.createElement("div");
+  fill.className = "clock-fill";
+  fill.style.width = `${progress}%`;
+  fill.style.backgroundColor = phase.color;
+  bar.appendChild(fill);
+  dayClock.appendChild(bar);
+
+  const label = document.createElement("span");
+  label.className = "clock-label";
+  label.textContent = phase.label;
+  dayClock.appendChild(label);
+}
+
 function updateHud(): void {
   const totalHours = clockTime / 3600;
   const hours = Math.floor(totalHours) % 24;
   const minutes = Math.floor((totalHours % 1) * 60);
   hudTime.textContent = `Day ${clockDay} \u00b7 ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-  hudCoins.textContent = `Coins ${coins}`;
+  hudCoins.textContent = `Coins ${coins} · Wood ${wood}`;
+  updateDayClock();
 
   toolbarEl.textContent = "";
   for (let i = 0; i < TOOL_COUNT; i++) {
@@ -819,7 +1518,9 @@ function saveGame(): void {
     clockDay,
     tiles: tiles.map((row) => [...row]),
     crops: crops.map((c) => ({ ...c })),
+    trees: trees.map((t) => ({ ...t })),
     coins,
+    wood,
     selectedTool,
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -843,6 +1544,13 @@ function loadGame(): boolean {
     crops.length = 0;
     if (data.crops) crops.push(...data.crops);
     coins = data.coins ?? 0;
+    wood = data.wood ?? 0;
+    if (data.trees) {
+      for (let i = 0; i < trees.length && i < data.trees.length; i++) {
+        trees[i]!.chopTime = data.trees[i].chopTime ?? 0;
+        trees[i]!.regrowTimer = data.trees[i].regrowTimer ?? 0;
+      }
+    }
     selectedTool = data.selectedTool ?? 0;
     return true;
   } catch {
@@ -850,26 +1558,68 @@ function loadGame(): boolean {
   }
 }
 
-// ── Day/Night Overlay ─────────────────────────────────────
+// ── Day/Night Lighting ────────────────────────────────────
 const nightOverlay = new Graphics();
+
+// Lighting moods keyed by hour
+interface LightMood {
+  hour: number;
+  color: number;
+  alpha: number;
+}
+
+const LIGHT_MOODS: LightMood[] = [
+  { hour: 0, color: 0x101830, alpha: 0.32 },    // deep night — soft blue
+  { hour: 1, color: 0x101830, alpha: 0.28 },    // late night
+  { hour: 1.5, color: 0x1e1838, alpha: 0.20 },  // pre-dawn
+  { hour: 2, color: 0x3a1838, alpha: 0.14 },    // dawn purple
+  { hour: 2.5, color: 0xc08060, alpha: 0.10 },  // sunrise peach
+  { hour: 3, color: 0xd8a050, alpha: 0.07 },    // golden hour
+  { hour: 4, color: 0xf0d070, alpha: 0.03 },    // warm morning
+  { hour: 5, color: 0x000000, alpha: 0 },        // clear day
+  { hour: 18, color: 0x000000, alpha: 0 },       // afternoon
+  { hour: 19, color: 0xf0c860, alpha: 0.04 },   // golden afternoon
+  { hour: 20, color: 0xd89048, alpha: 0.08 },    // sunset gold
+  { hour: 20.5, color: 0xc06838, alpha: 0.12 }, // sunset warm
+  { hour: 21, color: 0x6a2840, alpha: 0.18 },   // dusk purple
+  { hour: 21.5, color: 0x3a1838, alpha: 0.22 }, // twilight
+  { hour: 22, color: 0x181830, alpha: 0.28 },   // early night
+  { hour: 22.5, color: 0x101830, alpha: 0.32 }, // night
+  { hour: 24, color: 0x101830, alpha: 0.32 },   // wrap to midnight
+];
+
+function lerpColor(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bl;
+}
+
+function getLightMood(hour: number): { color: number; alpha: number } {
+  for (let i = 0; i < LIGHT_MOODS.length - 1; i++) {
+    const curr = LIGHT_MOODS[i]!;
+    const next = LIGHT_MOODS[i + 1]!;
+    if (hour >= curr.hour && hour < next.hour) {
+      const t = (hour - curr.hour) / (next.hour - curr.hour);
+      return {
+        color: lerpColor(curr.color, next.color, t),
+        alpha: curr.alpha + (next.alpha - curr.alpha) * t,
+      };
+    }
+  }
+  return LIGHT_MOODS[0]!;
+}
 
 function updateDayNight(): void {
   nightOverlay.clear();
   const hour = clockTime / 3600;
-  let darkness = 0;
-  if (hour < 5) darkness = 0.55;
-  else if (hour < 7) darkness = 0.55 * (1 - (hour - 5) / 2);
-  else if (hour < 18) darkness = 0;
-  else if (hour < 20) darkness = 0.55 * ((hour - 18) / 2);
-  else darkness = 0.55;
+  const mood = getLightMood(hour % 24);
 
-  if (darkness > 0.01) {
-    nightOverlay.rect(
-      -app.screen.width / RENDER_SCALE,
-      -app.screen.height / RENDER_SCALE,
-      app.screen.width * 2 / RENDER_SCALE,
-      app.screen.height * 2 / RENDER_SCALE,
-    ).fill({ color: 0x0a0820, alpha: darkness });
+  if (mood.alpha > 0.005) {
+    nightOverlay.rect(0, 0, app.screen.width, app.screen.height)
+      .fill({ color: mood.color, alpha: mood.alpha });
   }
 }
 
@@ -925,8 +1675,14 @@ function gameLoop(ticker: Ticker): void {
   const dt = Math.min(ticker.deltaMS / 1000, 0.05);
   if (gameMode === "playing") {
     updateClock(dt);
-    updateStego(dt);
     updateSplashes(dt);
+    updateMotes(dt);
+    updateTrees(dt);
+    updateButterflies(dt);
+    updateLeafParticles(dt);
+    updateBees(dt);
+    updateChickens(dt);
+    updateMapleLeaves(dt);
 
     // Hold-down continuous tool use
     if (mouseDown) {
@@ -952,7 +1708,7 @@ function gameLoop(ticker: Ticker): void {
 async function boot(): Promise<void> {
   await initPixi();
   app.stage.addChild(world);
-  world.addChild(nightOverlay);
+  app.stage.addChild(nightOverlay);
   setupInput();
   updateHud();
   app.ticker.add(gameLoop);
