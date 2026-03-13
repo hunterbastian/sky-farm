@@ -259,6 +259,182 @@ function drawChicken(g: Graphics, c: Chicken): void {
   }
 }
 
+// ── Eggs (chickens lay them) ──────────────────────────────
+interface Egg {
+  x: number; z: number; age: number;
+}
+const eggs: Egg[] = [];
+let eggTimer = 8 + Math.random() * 15;
+
+function updateEggs(dt: number): void {
+  eggTimer -= dt;
+  if (eggTimer <= 0 && eggs.length < 6) {
+    // Random chicken lays an egg
+    const c = chickens[Math.floor(Math.random() * chickens.length)];
+    if (c && c.state === "idle") {
+      eggs.push({ x: c.x, z: c.z, age: 0 });
+    }
+    eggTimer = 12 + Math.random() * 20;
+  }
+  for (const e of eggs) e.age += dt;
+}
+
+function drawEggs(g: Graphics): void {
+  for (const e of eggs) {
+    const px = Math.round(e.x * TILE_PX) + 6;
+    const pz = Math.round(e.z * TILE_PX) + 12;
+    // Shadow
+    g.ellipse(px + 1, pz + 3, 2, 1).fill({ color: 0x000000, alpha: 0.08 });
+    // Egg — white oval
+    g.rect(px, pz, 3, 3).fill(0xf8f0e0);
+    g.rect(px + 1, pz - 1, 1, 1).fill(0xf8f0e0);
+    g.rect(px, pz, 1, 1).fill({ color: 0xffffff, alpha: 0.4 });
+    g.rect(px + 1, pz + 2, 2, 1).fill(0xe8e0d0);
+  }
+}
+
+function collectEgg(tx: number, tz: number): boolean {
+  for (let i = eggs.length - 1; i >= 0; i--) {
+    const e = eggs[i]!;
+    if (Math.abs(Math.round(e.x) - tx) <= 1 && Math.abs(Math.round(e.z) - tz) <= 1) {
+      eggs.splice(i, 1);
+      coins += 3;
+      return true;
+    }
+  }
+  return false;
+}
+
+// ── Pond ─────────────────────────────────────────────────
+const POND_TILES = [
+  { x: 3, z: 19 }, { x: 4, z: 19 }, { x: 5, z: 19 },
+  { x: 3, z: 20 }, { x: 4, z: 20 }, { x: 5, z: 20 }, { x: 6, z: 20 },
+  { x: 3, z: 21 }, { x: 4, z: 21 }, { x: 5, z: 21 },
+  { x: 4, z: 22 },
+];
+
+function isPondTile(x: number, z: number): boolean {
+  return POND_TILES.some((t) => t.x === x && t.z === z);
+}
+
+function drawPondTile(g: Graphics, tx: number, tz: number): void {
+  const px = tx * TILE_PX;
+  const pz = tz * TILE_PX;
+  const now = performance.now() / 1000;
+
+  // Base water
+  g.rect(px, pz, TILE_PX, TILE_PX).fill(0x3a7aa8);
+
+  // Animated ripples
+  const wave = Math.sin(now * 2 + tx * 1.5 + tz * 2) * 0.5 + 0.5;
+  g.rect(px + 2, pz + Math.round(wave * 4) + 2, 4, 1).fill({ color: 0x5aaad8, alpha: 0.4 });
+  g.rect(px + 8, pz + Math.round((1 - wave) * 5) + 6, 3, 1).fill({ color: 0x5aaad8, alpha: 0.3 });
+
+  // Shimmer highlights
+  const shimmer = Math.sin(now * 3 + tx * 3 + tz) * 0.5 + 0.5;
+  if (shimmer > 0.6) {
+    g.rect(px + 4 + Math.round(shimmer * 4), pz + 3, 1, 1).fill({ color: 0xc0e8ff, alpha: shimmer * 0.5 });
+  }
+
+  // Darker edge against grass
+  const isEdge = (dx: number, dz: number) => !isPondTile(tx + dx, tz + dz);
+  if (isEdge(0, -1)) g.rect(px, pz, TILE_PX, 2).fill({ color: 0x2a6088, alpha: 0.4 });
+  if (isEdge(0, 1)) g.rect(px, pz + 14, TILE_PX, 2).fill({ color: 0x2a6088, alpha: 0.3 });
+  if (isEdge(-1, 0)) g.rect(px, pz, 2, TILE_PX).fill({ color: 0x2a6088, alpha: 0.3 });
+  if (isEdge(1, 0)) g.rect(px + 14, pz, 2, TILE_PX).fill({ color: 0x2a6088, alpha: 0.3 });
+
+  // Lily pad (only on a couple tiles)
+  if ((tx === 4 && tz === 20) || (tx === 5 && tz === 21)) {
+    const lilyX = px + 5 + Math.round(Math.sin(now * 0.5 + tx) * 1.5);
+    const lilyZ = pz + 6;
+    g.ellipse(lilyX + 2, lilyZ + 1, 3, 2).fill({ color: 0x4aaa3e, alpha: 0.7 });
+    g.rect(lilyX + 2, lilyZ, 1, 1).fill({ color: 0x5acc4e, alpha: 0.6 });
+    // Tiny flower on lily
+    if (tx === 4) {
+      g.rect(lilyX + 2, lilyZ - 1, 1, 1).fill({ color: 0xf0a0c0, alpha: 0.7 });
+    }
+  }
+}
+
+// ── Cloud Shadows ────────────────────────────────────────
+interface CloudShadow {
+  x: number; z: number; w: number; h: number; speed: number;
+}
+const cloudShadows: CloudShadow[] = [];
+for (let i = 0; i < 3; i++) {
+  cloudShadows.push({
+    x: Math.random() * ISLAND_SIZE * TILE_PX,
+    z: Math.random() * ISLAND_SIZE * TILE_PX,
+    w: 40 + Math.random() * 60,
+    h: 20 + Math.random() * 30,
+    speed: 3 + Math.random() * 4,
+  });
+}
+
+function updateCloudShadows(dt: number): void {
+  for (const c of cloudShadows) {
+    c.x += c.speed * dt;
+    if (c.x > ISLAND_SIZE * TILE_PX + 40) {
+      c.x = -c.w - 20;
+      c.z = Math.random() * ISLAND_SIZE * TILE_PX;
+      c.w = 40 + Math.random() * 60;
+      c.h = 20 + Math.random() * 30;
+    }
+  }
+}
+
+function drawCloudShadows(g: Graphics): void {
+  for (const c of cloudShadows) {
+    g.ellipse(Math.round(c.x), Math.round(c.z), c.w / 2, c.h / 2)
+      .fill({ color: 0x000000, alpha: 0.06 });
+  }
+}
+
+// ── Wildflowers ──────────────────────────────────────────
+interface Wildflower {
+  x: number; z: number; color: number; size: number; phase: number;
+}
+const wildflowers: Wildflower[] = [];
+let wildflowersInitialized = false;
+
+function initWildflowers(): void {
+  if (wildflowersInitialized) return;
+  wildflowersInitialized = true;
+  const flowerColors = [0xf0a0c0, 0xf0d060, 0xa0c0f0, 0xf0f0f0, 0xd090f0, 0xf0a040];
+  const rng = seededRandom(42);
+  for (let i = 0; i < 30; i++) {
+    const fx = Math.floor(rng() * ISLAND_SIZE);
+    const fz = Math.floor(rng() * ISLAND_SIZE);
+    if (isPondTile(fx, fz)) continue;
+    if (trees.some((t) => t.x === fx && t.z === fz)) continue;
+    if (mapleTrees.some((t) => t.x === fx && t.z === fz)) continue;
+    wildflowers.push({
+      x: fx * TILE_PX + 3 + rng() * 10,
+      z: fz * TILE_PX + 3 + rng() * 10,
+      color: flowerColors[Math.floor(rng() * flowerColors.length)]!,
+      size: 1 + Math.floor(rng() * 2),
+      phase: rng() * Math.PI * 2,
+    });
+  }
+}
+
+function drawWildflowers(g: Graphics): void {
+  const now = performance.now() / 1000;
+  for (const f of wildflowers) {
+    const sway = Math.sin(now * 1.5 + f.phase) * 0.8;
+    const bob = Math.sin(now * 2 + f.phase * 2) * 0.3;
+    const fx = Math.round(f.x + sway);
+    const fz = Math.round(f.z + bob);
+    // Stem
+    g.rect(fx, fz + 1, 1, 2).fill({ color: 0x4a9a30, alpha: 0.6 });
+    // Petals
+    g.rect(fx, fz, f.size, f.size).fill(f.color);
+    if (f.size > 1) {
+      g.rect(fx, fz, 1, 1).fill({ color: 0xffffff, alpha: 0.3 });
+    }
+  }
+}
+
 // ── Japanese Maple Trees ──────────────────────────────────
 interface MapleTree {
   x: number; z: number; variant: number;
@@ -1284,6 +1460,7 @@ function drawButterflies(g: Graphics): void {
 }
 
 function renderWorld(): void {
+  initWildflowers();
   groundGfx.clear();
   objectGfx.clear();
   uiGfx.clear();
@@ -1292,6 +1469,10 @@ function renderWorld(): void {
 
   for (let z = 0; z < ISLAND_SIZE; z++) {
     for (let x = 0; x < ISLAND_SIZE; x++) {
+      if (isPondTile(x, z)) {
+        drawPondTile(groundGfx, x, z);
+        continue;
+      }
       const tile = tiles[z]?.[x];
       if (!tile) continue;
       switch (tile) {
@@ -1307,7 +1488,10 @@ function renderWorld(): void {
     }
   }
 
+  drawCloudShadows(groundGfx);
+  drawWildflowers(objectGfx);
   for (const crop of crops) drawCrop(objectGfx, crop);
+  drawEggs(objectGfx);
   for (const tree of trees) drawTreeStump(objectGfx, tree);
   for (const tree of trees) drawTree(objectGfx, tree);
   if (trees[HIVE_TREE]) drawHiveAndBees(objectGfx, trees[HIVE_TREE]!);
@@ -1373,6 +1557,12 @@ function useTool(): void {
   const { x, z } = hoveredTile;
   const tile = tiles[z]?.[x];
   if (!tile) return;
+  // Collect eggs with any tool
+  if (collectEgg(x, z)) { updateHud(); return; }
+
+  // Can't interact with pond tiles
+  if (isPondTile(x, z)) return;
+
   const tool = TOOLS[selectedTool]!.id;
 
   switch (tool) {
@@ -1567,6 +1757,7 @@ function resetFarm(): void {
   wood = 0;
   selectedTool = 0;
   crops.length = 0;
+  eggs.length = 0;
   for (let z = 0; z < ISLAND_SIZE; z++) {
     for (let x = 0; x < ISLAND_SIZE; x++) {
       tiles[z]![x] = "grass";
@@ -1708,6 +1899,8 @@ function gameLoop(ticker: Ticker): void {
     updateBees(dt);
     updateChickens(dt);
     updateMapleLeaves(dt);
+    updateEggs(dt);
+    updateCloudShadows(dt);
 
     // Hold-down continuous tool use
     if (mouseDown) {
