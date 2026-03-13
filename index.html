@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sky Farm</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="game-container"></div>
+
+    <div id="hud" class="hidden">
+      <div id="top-bar">
+        <span id="hud-time">Day 1 · 08:00</span>
+        <span id="hud-coins">Coins 40</span>
+      </div>
+      <div id="hotbar"></div>
+      <div id="status-line">WASD move · Left click interact · Right click place · E inventory</div>
+    </div>
+
+    <div id="overlay" class="panel visible">
+      <h1>Sky Farm</h1>
+      <p>A pixel farming game above the clouds.</p>
+      <p class="hint">WASD move · Left click interact · Right click place · E inventory · 1-9 hotbar</p>
+      <button id="start-btn">Start Farming</button>
+    </div>
+
+    <div id="inventory-panel" class="panel wide hidden" aria-label="Inventory panel">
+      <div class="panel-header">
+        <h2>Inventory</h2>
+        <button id="inventory-close">Close (Esc)</button>
+      </div>
+
+      <div class="tab-row">
+        <button id="tab-inventory" class="tab-btn active">Inventory</button>
+        <button id="tab-crafting" class="tab-btn">Crafting</button>
+        <button id="tab-shop" class="tab-btn">Shop</button>
+      </div>
+
+      <div id="tab-content-inventory" class="tab-content visible">
+        <p class="hint">Left click: pick/place/swap · Right click: split/place one</p>
+        <div class="inventory-layout">
+          <div>
+            <h3>Backpack</h3>
+            <div id="inventory-grid" class="slot-grid"></div>
+          </div>
+          <div>
+            <h3>Hotbar</h3>
+            <div id="inventory-hotbar" class="slot-grid hotbar-grid"></div>
+          </div>
+          <div>
+            <h3>Held Stack</h3>
+            <div id="drag-stack" class="drag-stack">Empty</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-content-crafting" class="tab-content hidden">
+        <p class="hint">Craft items from farm resources.</p>
+        <div id="craft-list" class="craft-list"></div>
+      </div>
+
+      <div id="tab-content-shop" class="tab-content hidden">
+        <p id="shop-status" class="hint">Sky Market</p>
+        <h3>Buy</h3>
+        <div id="shop-buy" class="shop-grid"></div>
+        <h3>Sell</h3>
+        <div id="shop-sell" class="shop-grid"></div>
+      </div>
+
+      <div id="inventory-tooltip" class="inventory-tooltip hidden"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
