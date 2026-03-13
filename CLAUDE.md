@@ -1,54 +1,75 @@
 # CLAUDE.md — Sky Farm
 
 ## Overview
-Top-down 2D pixel farming game built with PixiJS + TypeScript + Vite. Stardew Valley-inspired aesthetic on a floating grass island above a dark blue void.
+Top-down 2D pixel farming game built with PixiJS v8 + TypeScript + Vite. Stardew Valley-inspired aesthetic on a floating grass island above a dark blue void. Retro CRT visual style with Press Start 2P pixel font.
 
 ## Build & Run
 - `npm run dev` — start Vite dev server
 - `npx tsc --noEmit` — type-check without emitting
 - `npm run build` — production build (`tsc && vite build`)
 
-## Architecture
-Single-file game at `src/main.ts` (~1000 lines). All rendering, game logic, and UI in one module.
-
-### Rendering
-- PixiJS v8 with WebGL backend, `roundPixels: true` for crisp pixels
-- 4 layered containers: `groundLayer` → `objectLayer` → `playerLayer` → `uiWorldLayer`
-- Per-frame `Graphics.clear()` + redraw (no sprite sheets — all procedural pixel art)
-- Camera follow via `world` container transform (`world.x/y` offset + `RENDER_SCALE` 3x)
-- `image-rendering: pixelated` on canvas for sharp upscaling
-- Day/night overlay via alpha-filled Graphics rect
-
-### Game Systems
-- 24x24 tile grid (`ISLAND_SIZE`), 16px per tile (`TILE_PX`)
-- Tile types: grass, farmland, road
-- Crops: sky_wheat (2-day), star_berry (4-day) — 4 growth stages
-- Placeables: bed, wood_block, door, torch
-- Inventory: 9 hotbar + 27 backpack slots, crafting, buy/sell shop
-- Day/night cycle: 540 real seconds = 1 game day
-- Save/load via localStorage (`sky_farm_save_v1`)
-
-### UI
-- HTML overlay for HUD, inventory panel, crafting, shop (not canvas-rendered)
-- DOM built with `createElement` + `textContent` (no innerHTML — security hook)
-- Tab system for inventory/crafting/shop panels
-
-## Controls
-- WASD/Arrows — move
-- Left click — interact (harvest, pick up)
-- Right click — place (seeds, items, tiles)
-- E — toggle inventory
-- 1-9 / scroll — hotbar selection
-- Bed + right click at night — sleep to next day
-
 ## Deployment
 - Vercel: https://sky-farm.vercel.app
 - GitHub: https://github.com/hunterbastian/sky-farm
-- `vercel --prod` to deploy
+- Vercel project name is `sky-islands` (aliased to `sky-farm.vercel.app`)
+- `vercel --prod` to deploy, then `open https://sky-farm.vercel.app`
+- **Always push to git AND deploy after every change**
+
+## Architecture
+Single-file game at `src/main.ts` (~2200 lines). All rendering, game logic, and UI in one module.
+
+### Rendering
+- PixiJS v8 with WebGL backend, `roundPixels: true` for crisp pixels
+- 3 layered containers: `groundLayer` → `objectLayer` → `uiWorldLayer`
+- Per-frame `Graphics.clear()` + redraw (no sprite sheets — all procedural pixel art)
+- Camera centered on island via `world` container transform (`RENDER_SCALE` 3x)
+- `image-rendering: pixelated` on canvas for sharp upscaling
+- Day/night overlay rendered on `app.stage` (screen space, not world space)
+- CRT scanlines + dither + vignette via CSS overlay (`#crt-overlay`)
+- Slight barrel curvature via CSS perspective transform on canvas
+
+### Game Systems
+- 24x24 tile grid (`ISLAND_SIZE`), 16px per tile (`TILE_PX`)
+- Tile types: grass, farmland
+- 4 crops: sky_wheat (3-day, 8 coins), star_berry (4-day, 15), cloud_pumpkin (5-day, 22), moon_flower (6-day, 30)
+- Each crop has unique pixel art across growth stages
+- Click seeds slot again to cycle seed type; `selectedSeed` indexes `CROP_IDS` array
+- 4 tools: hoe, water, seeds, axe — clickable toolbar + number keys + scroll
+- 3 oak trees (choppable with axe, regrow after 60s, give 3 wood)
+- Beehive on middle tree (HIVE_TREE=1) with 5 orbiting bees, sways with tree canopy
+- 2 Japanese maple trees with red/orange canopies, falling leaves that land and fade
+- 4 yellow chickens in fenced pen (tiles 8-13, 2-6) with idle animations (peck, ruffle, look, sit)
+- Chicken pen with fence posts, gate, feeding trough, hay bale, straw ground
+- Chickens lay eggs periodically — click to collect for 3 coins
+- Pond (bottom-left, ~11 tiles) with animated water, ripples, lily pads
+- Cloud shadows drifting across island
+- 30 wildflowers scattered on grass (seeded random, avoid pond/trees/pen)
+- Ambient particles: butterflies (4), motes (20), leaf particles from trees
+- Day/night cycle: 210 real seconds = 1 game day, spawn at 9 AM
+- 17 lighting mood keyframes, max alpha 0.32 (softened)
+- Save/load via localStorage (`sky_farm_save_v2`)
+- Reset Farm button (bottom-right) clears all progress
+
+### UI
+- HTML overlay for HUD (not canvas-rendered)
+- Press Start 2P pixel font (Google Fonts) for all text
+- DOM built with `createElement` + `textContent` (no innerHTML)
+- Day clock: emoji phase icon + progress bar + label
+- Boot screen: green terminal text typing animation before title
+- Pond tiles and pen tiles block farming interactions
+- `isPondTile()` and `isPenTile()` guard tile interactions
+
+## Controls
+- Left click — use tool (hoe, water, seeds, axe) / collect eggs
+- 1-4 / scroll — switch tools
+- Click toolbar slots to select tools
+- Click seeds slot again to cycle crop type
 
 ## Key Patterns
-- Seeded random (`seededRandom(tx * 1000 + tz * 37)`) for deterministic tile variation
-- Island edge: cliff face tiles drawn around perimeter with grass lip
-- Player sprite has directional eyes, hair tufts, shirt/pants/boots layers
+- Seeded random (`seededRandom(seed)`) for deterministic tile variation, wildflower placement
+- All entities (chickens, bees, butterflies) use idle sub-animation state machines
+- Wildflowers initialized lazily (`initWildflowers()` in first `renderWorld()` call) to avoid referencing trees/mapleTrees before declaration
+- Night overlay on `app.stage` (not `world`) to cover full screen regardless of camera
+- Beehive position tracks tree canopy sway via matching `Math.sin()` formula
 - Colors defined in `COLORS` object — Stardew-inspired palette
 - `output/` dir is gitignored (old test artifacts)
