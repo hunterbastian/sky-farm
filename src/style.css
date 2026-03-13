@@ -47,6 +47,7 @@ body {
   transform: translateX(-50%);
   display: flex;
   gap: 6px;
+  pointer-events: auto;
 }
 
 .hotbar-slot {

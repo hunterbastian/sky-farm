@@ -1010,6 +1010,60 @@ const resetBtn = el<HTMLButtonElement>("reset-btn");
 const dayClock = el<HTMLDivElement>("day-clock");
 const gameContainer = el<HTMLDivElement>("game-container");
 
+// ── Build toolbar slots once (click handlers persist) ─────
+interface ToolbarSlot { div: HTMLDivElement; icon: HTMLDivElement; name: HTMLDivElement; }
+const toolbarSlots: ToolbarSlot[] = [];
+
+for (let i = 0; i < TOOL_COUNT; i++) {
+  const tool = TOOLS[i]!;
+  const div = document.createElement("div");
+  div.className = "hotbar-slot";
+  div.style.pointerEvents = "auto";
+  div.style.cursor = "pointer";
+
+  const keySpan = document.createElement("div");
+  keySpan.className = "slot-key";
+  keySpan.textContent = String(i + 1);
+  div.appendChild(keySpan);
+
+  const iconSpan = document.createElement("div");
+  iconSpan.className = "slot-icon";
+  iconSpan.style.fontSize = "18px";
+  iconSpan.style.lineHeight = "1";
+  iconSpan.style.padding = "2px 0";
+  iconSpan.textContent = tool.icon;
+  div.appendChild(iconSpan);
+
+  const nameSpan = document.createElement("div");
+  nameSpan.className = "slot-name";
+  nameSpan.textContent = tool.label;
+  div.appendChild(nameSpan);
+
+  const idx = i;
+  div.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (idx === selectedTool && tool.id === "seeds") {
+      selectedSeed = (selectedSeed + 1) % CROP_IDS.length;
+    }
+    selectedTool = idx;
+    sfxSelect();
+    updateHud();
+  });
+  if (tool.id === "seeds") {
+    div.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      selectedSeed = (selectedSeed + 1) % CROP_IDS.length;
+      selectedTool = idx;
+      sfxSelect();
+      updateHud();
+    });
+  }
+
+  toolbarEl.appendChild(div);
+  toolbarSlots.push({ div, icon: iconSpan, name: nameSpan });
+}
+
 // ── Pixel Art Cursors ─────────────────────────────────────
 function makePixelCursor(draw: (ctx: CanvasRenderingContext2D) => void, hotX = 0, hotY = 0): string {
   const size = 32;
@@ -2191,62 +2245,20 @@ function updateHud(): void {
   hudCoins.textContent = `Coins ${coins} · Wood ${wood}`;
   updateDayClock();
 
-  toolbarEl.textContent = "";
+  // Update toolbar slots (don't rebuild — just update classes and text)
   for (let i = 0; i < TOOL_COUNT; i++) {
+    const slot = toolbarSlots[i];
+    if (!slot) continue;
     const tool = TOOLS[i]!;
-    const div = document.createElement("div");
-    div.className = `hotbar-slot${i === selectedTool ? " active" : ""}`;
-    div.style.pointerEvents = "auto";
-    div.style.cursor = "pointer";
-
-    const keySpan = document.createElement("div");
-    keySpan.className = "slot-key";
-    keySpan.textContent = String(i + 1);
-    div.appendChild(keySpan);
-
-    const iconSpan = document.createElement("div");
-    iconSpan.className = "slot-icon";
-    iconSpan.style.fontSize = "18px";
-    iconSpan.style.lineHeight = "1";
-    iconSpan.style.padding = "2px 0";
-
-    const nameSpan = document.createElement("div");
-    nameSpan.className = "slot-name";
-
-    // Seeds slot shows current seed type
+    slot.div.className = `hotbar-slot${i === selectedTool ? " active" : ""}`;
     if (tool.id === "seeds") {
       const seedDef = CROP_DEFS[CROP_IDS[selectedSeed]!];
-      iconSpan.textContent = seedDef.icon;
-      nameSpan.textContent = seedDef.label;
+      slot.icon.textContent = seedDef.icon;
+      slot.name.textContent = seedDef.label;
     } else {
-      iconSpan.textContent = tool.icon;
-      nameSpan.textContent = tool.label;
+      slot.icon.textContent = tool.icon;
+      slot.name.textContent = tool.label;
     }
-
-    div.appendChild(iconSpan);
-    div.appendChild(nameSpan);
-
-    const idx = i;
-    div.addEventListener("click", () => {
-      if (idx === selectedTool && tool.id === "seeds") {
-        selectedSeed = (selectedSeed + 1) % CROP_IDS.length;
-      }
-      selectedTool = idx;
-      sfxSelect();
-      updateHud();
-    });
-    if (tool.id === "seeds") {
-      div.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        selectedSeed = (selectedSeed + 1) % CROP_IDS.length;
-        selectedTool = idx;
-        sfxSelect();
-        updateHud();
-      });
-    }
-
-    toolbarEl.appendChild(div);
   }
 }
 
