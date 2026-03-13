@@ -1269,16 +1269,35 @@ const cursorSeeds = makePixelCursor((ctx) => {
 }, 6, 14);
 
 const cursorAxe = makePixelCursor((ctx) => {
-  // Handle
-  px(ctx, 3, 4, 1, 10, "#8b6840");
-  px(ctx, 4, 4, 1, 10, "#7a5e36");
-  // Axe head
-  px(ctx, 0, 1, 4, 3, "#a0a0a0");
-  px(ctx, 0, 0, 3, 1, "#c0c0c0");
-  px(ctx, 0, 3, 3, 1, "#888888");
-  // Blade edge
-  px(ctx, 0, 1, 1, 3, "#d0d0d0");
-}, 2, 2);
+  // Handle — long wooden shaft with grain
+  px(ctx, 5, 5, 1, 10, "#8b6840");
+  px(ctx, 6, 5, 1, 10, "#7a5e36");
+  px(ctx, 5, 8, 1, 1, "#9a7848"); // grain highlight
+  px(ctx, 6, 11, 1, 1, "#6a4e2e"); // grain shadow
+  // Handle wrap/grip
+  px(ctx, 5, 12, 2, 1, "#5a3820");
+  px(ctx, 5, 14, 2, 1, "#5a3820");
+  // Handle pommel
+  px(ctx, 4, 15, 3, 1, "#6a4830");
+  // Axe head — curved blade shape
+  px(ctx, 1, 2, 5, 4, "#8a8a8a"); // main head body
+  px(ctx, 0, 3, 1, 2, "#9a9a9a"); // blade curve left
+  px(ctx, 0, 2, 1, 1, "#a0a0a0"); // blade tip top
+  px(ctx, 0, 5, 1, 1, "#a0a0a0"); // blade tip bottom
+  px(ctx, 6, 3, 1, 2, "#707070"); // back of head
+  // Blade edge — bright steel
+  px(ctx, 0, 2, 1, 4, "#d0d0d0");
+  px(ctx, 1, 1, 1, 1, "#c8c8c8"); // upper blade sweep
+  px(ctx, 1, 6, 1, 1, "#c8c8c8"); // lower blade sweep
+  // Head highlights
+  px(ctx, 2, 2, 2, 1, "#b0b0b0");
+  px(ctx, 1, 3, 1, 1, "#c0c0c0");
+  // Head shadow
+  px(ctx, 2, 5, 3, 1, "#707070");
+  // Binding where head meets handle
+  px(ctx, 4, 3, 2, 2, "#5a5a5a");
+  px(ctx, 4, 3, 1, 1, "#6a6a6a");
+}, 1, 3);
 
 const toolCursors: Record<ToolId, string> = {
   pointer: "default",
