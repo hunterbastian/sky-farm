@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Sky Farm</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -10,19 +11,32 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="game-container"></div>
-
-    <div id="hud" class="hidden">
-      <div id="top-bar">
-        <span id="hud-time">Day 1 · 08:00</span>
-        <span id="hud-coins">Coins 40</span>
+    <div id="game-layout">
+      <div id="hud-left" class="hud-side hidden">
+        <div id="top-bar">
+          <span id="hud-time">Day 1 · 08:00</span>
+          <span id="hud-coins">Coins 40</span>
+          <span id="hud-wood">Wood 0</span>
+        </div>
+        <div id="day-clock"></div>
+        <div id="speed-control">
+          <button class="speed-btn active" data-speed="1">▶ 1x</button>
+          <button class="speed-btn" data-speed="2">▶▶ 2x</button>
+          <button class="speed-btn" data-speed="3">▶▶▶ 3x</button>
+        </div>
+        <div id="status-line">Tap grass to till · Tap soil to plant</div>
       </div>
-      <div id="toolbar"></div>
-      <div id="day-clock"></div>
-      <div id="status-line">Tap grass to till · Tap soil to plant · Crops auto-grow and auto-harvest</div>
-      <button id="reset-btn">Reset Farm</button>
-      <button id="changelog-btn">Journal</button>
+
+      <div id="game-container"></div>
+
+      <div id="hud-right" class="hud-side hidden">
+        <div id="toolbar"></div>
+        <button id="changelog-btn">Journal</button>
+        <button id="reset-btn">Reset</button>
+      </div>
     </div>
+
+    <div id="hud" class="hidden"></div>
 
     <div id="changelog-panel" class="panel hidden">
       <h1>Farm Journal</h1>
