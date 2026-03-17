@@ -25,7 +25,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: "Press Start 2P", monospace;
+  font-family: "DotGothic16", "Press Start 2P", sans-serif;
   background: #e8e0d0;
 }
 
@@ -64,14 +64,18 @@ body {
 
 #top-bar > span {
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect x='0' y='0' width='1' height='1' fill='%23000' opacity='0.015'/%3E%3Crect x='2' y='2' width='1' height='1' fill='%23000' opacity='0.01'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 50%),
     rgba(255, 254, 248, 0.92);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  padding: 8px 10px;
-  border-radius: 12px;
-  border: 1.5px solid var(--ac-brown-light);
-  box-shadow: 0 2px 10px var(--ac-shadow);
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 2px solid rgba(255,255,255,0.6);
+  border-bottom-color: var(--ac-brown-light);
+  border-right-color: var(--ac-brown-light);
+  box-shadow:
+    0 3px 12px var(--ac-shadow),
+    0 1px 0 rgba(255,255,255,0.8) inset;
   color: var(--ac-text);
   text-align: center;
 }
@@ -83,14 +87,18 @@ body {
   font-size: 7px;
   color: var(--ac-text);
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect x='0' y='0' width='1' height='1' fill='%23000' opacity='0.015'/%3E%3Crect x='2' y='2' width='1' height='1' fill='%23000' opacity='0.01'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 50%),
     rgba(255, 254, 248, 0.92);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  padding: 8px 10px;
-  border-radius: 12px;
-  border: 1.5px solid var(--ac-brown-light);
-  box-shadow: 0 2px 10px var(--ac-shadow);
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 2px solid rgba(255,255,255,0.6);
+  border-bottom-color: var(--ac-brown-light);
+  border-right-color: var(--ac-brown-light);
+  box-shadow:
+    0 3px 12px var(--ac-shadow),
+    inset 0 1px 0 rgba(255,255,255,0.8);
 }
 
 #day-clock .clock-icon {
@@ -123,13 +131,19 @@ body {
 #speed-control {
   display: flex;
   gap: 3px;
-  background: rgba(255, 254, 248, 0.9);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 50%),
+    rgba(255, 254, 248, 0.92);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  padding: 4px;
-  border-radius: 12px;
-  border: 1.5px solid var(--ac-brown-light);
-  box-shadow: 0 2px 8px var(--ac-shadow);
+  padding: 5px;
+  border-radius: 14px;
+  border: 2px solid rgba(255,255,255,0.6);
+  border-bottom-color: var(--ac-brown-light);
+  border-right-color: var(--ac-brown-light);
+  box-shadow:
+    0 3px 10px var(--ac-shadow),
+    inset 0 1px 0 rgba(255,255,255,0.8);
 }
 
 .speed-btn {
@@ -137,27 +151,38 @@ body {
   padding: 5px 2px;
   font-size: 5px;
   font-family: inherit;
-  border: 1.5px solid transparent;
-  border-radius: 8px;
-  background: var(--ac-cream);
+  border: 1.5px solid rgba(255,255,255,0.4);
+  border-bottom-color: rgba(180,160,130,0.2);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 60%),
+    var(--ac-cream);
   color: var(--ac-text-light);
   cursor: pointer;
   transition: all 0.15s ease;
   margin: 0;
-  box-shadow: none;
+  box-shadow: 0 1px 4px rgba(90,74,58,0.06);
   text-shadow: none;
 }
 
 .speed-btn:hover {
-  background: #f0eadc;
-  border-color: var(--ac-brown-light);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 50%),
+    #f0eadc;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(90,74,58,0.1);
 }
 
 .speed-btn.active {
-  background: var(--ac-green);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 50%),
+    var(--ac-green);
   color: #fff;
-  border-color: var(--ac-green-dark);
-  box-shadow: 0 0 0 2px rgba(126, 202, 160, 0.2);
+  border: 1.5px solid rgba(255,255,255,0.3);
+  border-bottom-color: var(--ac-green-dark);
+  box-shadow:
+    0 2px 8px rgba(126, 202, 160, 0.25),
+    inset 0 1px 0 rgba(255,255,255,0.4);
 }
 
 #status-line {
@@ -165,10 +190,17 @@ body {
   color: var(--ac-text-light);
   text-align: center;
   line-height: 1.6;
-  padding: 6px 8px;
-  background: rgba(255, 254, 248, 0.7);
-  border-radius: 10px;
-  border: 1px solid var(--ac-brown-light);
+  padding: 8px 10px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 50%),
+    rgba(255, 254, 248, 0.85);
+  border-radius: 14px;
+  border: 2px solid rgba(255,255,255,0.5);
+  border-bottom-color: var(--ac-brown-light);
+  border-right-color: var(--ac-brown-light);
+  box-shadow:
+    0 2px 8px var(--ac-shadow),
+    inset 0 1px 0 rgba(255,255,255,0.7);
 }
 
 /* ── Center: game canvas ──────────────────── */
@@ -185,9 +217,11 @@ body {
 #game-container canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  /* flat 2D — no tilt */
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(90, 74, 58, 0.15);
+  border-radius: 16px;
+  box-shadow:
+    0 8px 32px rgba(90, 74, 58, 0.15),
+    0 2px 0 rgba(255,255,255,0.3),
+    inset 0 0 0 1px rgba(255,255,255,0.1);
 }
 
 /* ── Right Sidebar: toolbar + buttons ─────── */
@@ -196,12 +230,14 @@ body {
   flex-direction: column;
   gap: 4px;
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect x='0' y='0' width='1' height='1' fill='%23000' opacity='0.015'/%3E%3Crect x='2' y='2' width='1' height='1' fill='%23000' opacity='0.01'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 40%),
     rgba(255, 254, 248, 0.92);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  padding: 6px;
-  border: 1.5px solid var(--ac-brown-light);
+  padding: 8px;
+  border: 2px solid rgba(255,255,255,0.6);
+  border-bottom-color: var(--ac-brown-light);
+  border-right-color: var(--ac-brown-light);
   border-radius: 14px;
   box-shadow: 0 4px 16px var(--ac-shadow);
 }
@@ -209,32 +245,47 @@ body {
 .hotbar-slot {
   width: 100%;
   min-height: 44px;
-  padding: 4px;
-  border: 1.5px solid transparent;
-  background: var(--ac-cream);
+  padding: 6px;
+  border: 2px solid rgba(255,255,255,0.5);
+  border-bottom-color: rgba(180,160,130,0.3);
+  border-right-color: rgba(180,160,130,0.3);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 50%, rgba(0,0,0,0.02) 100%),
+    var(--ac-cream);
   text-align: center;
   font-size: 7px;
   line-height: 1.4;
   color: var(--ac-text);
-  border-radius: 10px;
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: inset 0 1px 3px rgba(90, 74, 58, 0.06);
+  border-radius: 12px;
+  transition: all 0.15s ease;
+  box-shadow:
+    0 2px 6px rgba(90, 74, 58, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.8);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .hotbar-slot:hover {
-  background: #f5eedc;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 50%),
+    #f5eedc;
   border-color: var(--ac-brown-light);
+  box-shadow:
+    0 3px 10px rgba(90, 74, 58, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.9);
+  transform: translateY(-1px);
 }
 
 .hotbar-slot.active {
-  border: 2px solid var(--ac-green);
-  background: #f0f8f2;
+  border: 2.5px solid var(--ac-green);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(126,202,160,0.08) 100%),
+    #f0f8f2;
   box-shadow:
     0 0 0 3px rgba(126, 202, 160, 0.2),
-    inset 0 1px 2px rgba(90, 154, 120, 0.08);
+    0 2px 8px rgba(126, 202, 160, 0.15),
+    inset 0 1px 0 rgba(255,255,255,0.8);
 }
 
 .slot-key {
@@ -470,7 +521,7 @@ body {
 }
 
 #boot-text {
-  font-family: "Press Start 2P", monospace;
+  font-family: "DotGothic16", "Press Start 2P", sans-serif;
   font-size: 8px;
   color: #a8d8b8;
   text-align: left;
