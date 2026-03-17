@@ -1954,15 +1954,15 @@ function updateCursor(): void {
 const app = new Application();
 
 async function initPixi(): Promise<void> {
+  const container = el<HTMLDivElement>("game-container");
   await app.init({
     background: 0x6aaed8,
-    resizeTo: window,
+    resizeTo: container,
     antialias: false,
     roundPixels: true,
     resolution: 1,
   });
 
-  const container = el<HTMLDivElement>("game-container");
   container.appendChild(app.canvas);
   app.canvas.style.imageRendering = "pixelated";
 }
