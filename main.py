@@ -26,6 +26,7 @@ from pet import Pet
 from footprints import FootprintSystem
 from weather import WeatherSystem
 from economy import Economy
+from save_load import save_game, load_game, apply_save, AUTO_SAVE_INTERVAL
 from boot import BootScreen
 from sound import (
     init_sounds, init_music, play_sfx, MusicManager,
@@ -74,6 +75,19 @@ class App:
             "coins": 0,
             "wood": 0,
         }
+        self.save_timer = 0.0
+
+        # Load save if it exists
+        save_data = load_game()
+        if save_data:
+            pet = apply_save(
+                save_data, self.tiles, self.game_state, self.clock,
+                self.crop_system, self.goals, self.economy,
+                self.animal_system, self.tree_system, self.particles,
+                expand_island, Pet,
+            )
+            if pet:
+                self.pet = pet
 
         pyxel.run(self.update, self.draw)
 
@@ -196,6 +210,16 @@ class App:
 
         # --- UI ---
         self.ui.update(dt)
+
+        # --- Auto-save ---
+        self.save_timer += dt
+        if self.save_timer >= AUTO_SAVE_INTERVAL:
+            self.save_timer = 0.0
+            save_game(
+                self.tiles, self.game_state, self.clock,
+                self.crop_system, self.goals, self.economy,
+                self.animal_system,
+            )
 
     def _auto_interact(self, tx, ty):
         """Smart tap triggered by the slime landing on a tile.

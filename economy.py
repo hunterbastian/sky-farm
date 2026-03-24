@@ -53,6 +53,12 @@ class Economy:
         elif item["name"] == "Golden Eggs":
             self.egg_multiplier = 2
 
+    def _apply_all(self):
+        """Re-apply all purchased upgrades (used when loading a save)."""
+        for item in SHOP_ITEMS:
+            if item["name"] in self.purchased:
+                self._apply_upgrade(item)
+
     @property
     def island_level(self):
         """How many island expansions have been purchased (0-3)."""
