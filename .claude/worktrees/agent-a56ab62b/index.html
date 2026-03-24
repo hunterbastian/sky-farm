@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sky Farm</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="game-container"></div>
+
+    <div id="hud" class="hidden">
+      <div id="top-bar">
+        <span id="hud-time">Day 1 · 08:00</span>
+        <span id="hud-coins">Coins 40</span>
+      </div>
+      <div id="toolbar"></div>
+      <div id="day-clock"></div>
+      <div id="status-line">Tap grass to till · Tap soil to plant · Crops auto-grow and auto-harvest</div>
+      <button id="reset-btn">Reset Farm</button>
+      <button id="changelog-btn">Journal</button>
+    </div>
+
+    <div id="changelog-panel" class="panel hidden">
+      <h1>Farm Journal</h1>
+      <div id="changelog-entries"></div>
+      <button id="changelog-close">Close</button>
+    </div>
+
+    <div id="boot-screen">
+      <div id="boot-text"></div>
+    </div>
+
+    <div id="overlay" class="panel hidden">
+      <h1>Sky Farm</h1>
+      <p>A pixel farming game above the clouds.</p>
+      <p class="hint">Tap to till and plant · Your farm grows on its own</p>
+      <button id="start-btn">Start Farming</button>
+    </div>
+
+    <div id="crt-overlay"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
