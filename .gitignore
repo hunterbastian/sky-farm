@@ -7,3 +7,5 @@ dist/
 build/
 .claude/
 .DS_Store
+*.pyxapp
+soratchi.html

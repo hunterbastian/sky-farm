@@ -15,43 +15,81 @@ TILE_GRASS = "grass"
 TILE_FARMLAND = "farmland"
 
 
-def _make_island_mask():
-    """Generate which tiles are part of the island (rounded rectangle shape).
-    Returns a set of (x, y) tuples that are valid island positions.
+def make_island_mask(level=0):
+    """Generate island tiles based on expansion level (0-3).
 
-    The original PixiJS version used a circular/rounded island.
-    We'll make a rounded rectangle that fills most of the 24x24 grid.
+    Level 0: small circle (radius 4) — ~50 tiles, cozy starter
+    Level 1: medium circle (radius 7) — ~150 tiles
+    Level 2: large circle (radius 9) — ~250 tiles
+    Level 3: full rounded rectangle — ~556 tiles (original size)
+
+    The island is always centered at (12, 12) within the 24x24 grid.
     """
     mask = set()
     cx, cy = ISLAND_SIZE // 2, ISLAND_SIZE // 2  # center (12, 12)
-    # Rounded rectangle: full grid minus corners
-    corner_radius = 3
-    for y in range(ISLAND_SIZE):
-        for x in range(ISLAND_SIZE):
-            # Check if this tile is inside the rounded rectangle
-            # A rounded rect = rectangle where corners are clipped by circles
-            dx = 0
-            dy = 0
-            if x < corner_radius:
-                dx = corner_radius - x
-            elif x >= ISLAND_SIZE - corner_radius:
-                dx = x - (ISLAND_SIZE - corner_radius - 1)
-            if y < corner_radius:
-                dy = corner_radius - y
-            elif y >= ISLAND_SIZE - corner_radius:
-                dy = y - (ISLAND_SIZE - corner_radius - 1)
 
-            # If we're in a corner zone, check the circular clip
-            if dx > 0 and dy > 0:
-                if dx * dx + dy * dy > corner_radius * corner_radius:
-                    continue  # outside the rounded corner
+    if level >= 3:
+        # Full island — rounded rectangle (original behavior)
+        corner_radius = 3
+        for y in range(ISLAND_SIZE):
+            for x in range(ISLAND_SIZE):
+                ddx = 0
+                ddy = 0
+                if x < corner_radius:
+                    ddx = corner_radius - x
+                elif x >= ISLAND_SIZE - corner_radius:
+                    ddx = x - (ISLAND_SIZE - corner_radius - 1)
+                if y < corner_radius:
+                    ddy = corner_radius - y
+                elif y >= ISLAND_SIZE - corner_radius:
+                    ddy = y - (ISLAND_SIZE - corner_radius - 1)
+                if ddx > 0 and ddy > 0:
+                    if ddx * ddx + ddy * ddy > corner_radius * corner_radius:
+                        continue
+                mask.add((x, y))
+    else:
+        # Circular island with radius based on level
+        radii = [4.5, 7, 9.5]
+        radius = radii[level]
+        for y in range(ISLAND_SIZE):
+            for x in range(ISLAND_SIZE):
+                dx = x - cx
+                dy = y - cy
+                if dx * dx + dy * dy <= radius * radius:
+                    mask.add((x, y))
 
-            mask.add((x, y))
     return mask
 
 
-# The island shape — frozen at import time
-ISLAND_MASK = _make_island_mask()
+# Current island state — starts small, can be rebuilt when expanded
+ISLAND_MASK = make_island_mask(0)
+
+
+def expand_island(level):
+    """Rebuild the island mask for a new expansion level.
+    Call this when the player purchases an island expansion.
+    """
+    global ISLAND_MASK, POND_TILES, PEN_TILES, GRASS_VARIATION
+    global WILDFLOWER_POSITIONS
+
+    ISLAND_MASK = make_island_mask(level)
+
+    # Rebuild dependent zones (only include tiles that are on the island)
+    if level >= 2:
+        POND_TILES.update(_make_pond_tiles())
+    if level >= 1:
+        PEN_TILES.update(_make_pen_tiles())
+
+    # Extend grass variation to new tiles
+    rng = random.Random(42)
+    for y in range(ISLAND_SIZE):
+        for x in range(ISLAND_SIZE):
+            if (x, y) in ISLAND_MASK and (x, y) not in GRASS_VARIATION:
+                GRASS_VARIATION[(x, y)] = rng.randint(0, 3)
+
+    # Re-scatter wildflowers
+    WILDFLOWER_POSITIONS.clear()
+    WILDFLOWER_POSITIONS.extend(_make_wildflower_positions())
 
 
 def _make_pond_tiles():

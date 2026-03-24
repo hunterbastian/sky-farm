@@ -1,14 +1,12 @@
 # input_handler.py — Mouse/keyboard input → game actions
 #
-# Implements the "smart tap" system from the original:
-# clicking a tile does the contextually appropriate action.
-#   - Grass → till it
-#   - Farmland (empty) → plant a seed
-#   - Mature crop → harvest
+# Implements the "smart tap" system:
 #   - Tree → chop
-#
-# Python note: Functions are first-class (like JS arrow functions).
-# We pass callback functions to decouple input from game logic.
+#   - Egg nearby → collect
+#   - Mature crop → harvest
+#   - Farmland (empty) → plant a seed
+#   - Grass → till
+#   - Pond/pen → nothing
 
 import pyxel
 from constants import TILE_PX, ISLAND_X, ISLAND_Y, ISLAND_SIZE
@@ -21,24 +19,16 @@ from world import (
 def screen_to_tile(screen_x, screen_y):
     """Convert screen pixel coordinates to tile grid coordinates.
     Returns (tile_x, tile_y) or None if outside the island.
-
-    This is the inverse of draw_world.tile_to_screen().
     """
-    # Subtract island offset to get position relative to island
     local_x = screen_x - ISLAND_X
     local_y = screen_y - ISLAND_Y
-
-    # Convert pixels to tile coordinates (integer division)
-    # Python's // is integer division — like Math.floor(a/b) in JS
     tx = local_x // TILE_PX
     ty = local_y // TILE_PX
 
-    # Bounds check
     if tx < 0 or tx >= ISLAND_SIZE or ty < 0 or ty >= ISLAND_SIZE:
         return None
     if not is_on_island(tx, ty):
         return None
-
     return (tx, ty)
 
 
@@ -51,30 +41,27 @@ class InputHandler:
     """Processes mouse clicks and keyboard input each frame."""
 
     def __init__(self):
-        self.hovered_tile = None  # (x, y) or None — tile under cursor
+        self.hovered_tile = None
 
-    def update(self, tiles, crop_system, game_state):
+    def update(self, tiles, crop_system, game_state,
+               tree_system=None, animal_system=None):
         """Process input for this frame.
 
-        Args:
-            tiles: The tile grid (2D list).
-            crop_system: CropSystem instance.
-            game_state: Dict with mutable game state (coins, wood, etc.).
-
         Returns:
-            List of events that happened: [("till", x, y), ("plant", x, y), ...]
-            Used by other systems (particles, sound) to react.
+            List of events: [("till", x, y), ("chop", x, y, hits_left), ...]
         """
         events = []
         self.hovered_tile = get_hovered_tile()
 
-        # --- Mouse click (left button) ---
-        # pyxel.btnp = "button pressed this frame" (like a mousedown event)
+        # --- Mouse click ---
         if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
             tile = self.hovered_tile
             if tile is not None:
                 tx, ty = tile
-                evt = self._smart_tap(tx, ty, tiles, crop_system, game_state)
+                evt = self._smart_tap(
+                    tx, ty, tiles, crop_system, game_state,
+                    tree_system, animal_system,
+                )
                 if evt:
                     events.append(evt)
 
@@ -83,27 +70,44 @@ class InputHandler:
             crop_system.cycle_seed()
             events.append(("cycle_seed",))
 
-        # --- Keyboard: speed control ---
-        # (handled in main.py directly since it modifies the clock)
-
         return events
 
-    def _smart_tap(self, tx, ty, tiles, crop_system, game_state):
+    def _smart_tap(self, tx, ty, tiles, crop_system, game_state,
+                   tree_system=None, animal_system=None):
         """Determine what action to take when tapping a tile.
 
         Smart tap priority:
-        1. Mature crop → harvest
-        2. Farmland (empty) → plant
-        3. Grass → till
-        4. Pond/pen → nothing
+        1. Tree → chop
+        2. Egg nearby → collect
+        3. Mature crop → harvest
+        4. Farmland (empty) → plant
+        5. Grass → till
+        6. Pond/pen → nothing
         """
-        # Skip non-interactable zones
-        if is_pond_tile(tx, ty) or is_pen_tile(tx, ty):
+        # --- Chop tree ---
+        if tree_system:
+            oak = tree_system.chop_at(tx, ty)
+            if oak:
+                return ("chop", tx, ty, oak.health)
+
+        # --- Collect egg (in pen area) ---
+        if animal_system and is_pen_tile(tx, ty):
+            egg_coins = animal_system.collect_egg_at(tx, ty)
+            if egg_coins > 0:
+                game_state["coins"] += egg_coins
+                return ("collect_egg", tx, ty)
+
+        # Skip pond (but pen can have eggs above)
+        if is_pond_tile(tx, ty):
+            return None
+
+        # Skip pen tiles for farming (but not for egg collecting above)
+        if is_pen_tile(tx, ty):
             return None
 
         tile_type = tiles[ty][tx]
 
-        # Check for mature crop first
+        # --- Harvest mature crop ---
         crop = crop_system.get_crop_at(tx, ty)
         if crop is not None and crop.is_mature:
             sell_price = crop_system.harvest(tx, ty)
@@ -111,13 +115,16 @@ class InputHandler:
                 game_state["coins"] += sell_price
                 return ("harvest", tx, ty, sell_price)
 
-        # Plant on empty farmland
+        # --- Plant on empty farmland ---
         if tile_type == TILE_FARMLAND and crop is None:
             if crop_system.plant(tx, ty, tiles):
                 return ("plant", tx, ty)
 
-        # Till grass into farmland
+        # --- Till grass ---
         if tile_type == TILE_GRASS and is_farmable(tx, ty):
+            # Don't till under trees
+            if tree_system and tree_system.is_tree_tile(tx, ty):
+                return None
             if crop_system.till(tx, ty, tiles):
                 return ("till", tx, ty)
 

@@ -85,6 +85,11 @@ class UI:
 
     def __init__(self):
         self.floating_texts = []
+        self.inventory_open = False
+
+    def toggle_inventory(self):
+        """Toggle the inventory panel."""
+        self.inventory_open = not self.inventory_open
 
     def add_floating_text(self, tile_x, tile_y, text, color=COL_GOLD):
         """Spawn floating text above a tile."""
@@ -103,7 +108,7 @@ class UI:
             if ft.timer < ft.max_time
         ]
 
-    def draw_hud(self, clock, coins, wood, crop_system):
+    def draw_hud(self, clock, coins, wood, crop_system, weather=None):
         """Draw the top info bubble centered above the island."""
         # === Top bubble: day, time, coins, wood ===
         bubble_w = 140
@@ -147,6 +152,10 @@ class UI:
         pyxel.pset(wood_x + 1, ty2 + 2, COL_TAN)
         pyxel.text(wood_x + 5, ty2, f"{wood}", COL_DARK)
 
+        # Weather indicator
+        if weather:
+            weather.draw_indicator(bx + 80, ty2)
+
         # Speed — right side of line 2
         speed_str = f"{clock.speed}X"
         speed_x = bx + bubble_w - BUBBLE_PAD - len(speed_str) * CHAR_W - 1
@@ -154,51 +163,99 @@ class UI:
         pyxel.text(speed_x, ty2, speed_str, speed_col)
 
     def draw_toolbar(self, crop_system, hovered_tile, tiles=None):
-        """Draw the bottom toolbar bubble below the island."""
-        # === Bottom bubble: seed type, action hint, controls ===
-        bubble_w = 160
-        bubble_h = 18
-        bx = (SCREEN_W - bubble_w) // 2
-        by = ISLAND_Y + WORLD_PX + 2  # just below island, 2px gap
+        """Draw a clickable toolbar with seed slots, speed, and inventory buttons."""
+        # Toolbar layout: 4 seed slots + speed button + inventory button
+        slot_size = 14       # each slot is 14x14 px
+        slot_gap = 3
+        num_slots = 6        # 4 seeds + speed + inv
+        total_w = num_slots * slot_size + (num_slots - 1) * slot_gap
+        start_x = (SCREEN_W - total_w) // 2
+        bar_y = ISLAND_Y + WORLD_PX + 3
 
-        # Clamp so bubble doesn't go off-screen
-        if by + bubble_h > SCREEN_H:
-            by = SCREEN_H - bubble_h
+        # Clamp to screen
+        if bar_y + slot_size + 2 > SCREEN_H:
+            bar_y = SCREEN_H - slot_size - 2
 
-        draw_bubble(bx, by, bubble_w, bubble_h)
+        # Store slot positions for click detection
+        self._toolbar_slots = []
 
-        # Line 1: Seed type indicator + action hint
-        tx = bx + BUBBLE_PAD + 1
-        ty = by + BUBBLE_PAD
+        short_labels = ["WHT", "BRY", "PMP", "FLR"]
 
-        # Seed color dot + name
-        seed_name = CROP_IDS[crop_system.selected_seed]
-        seed_color = CROPS[seed_name]["color"]
-        short_names = {
-            "sky_wheat": "Wheat",
-            "star_berry": "Berry",
-            "cloud_pumpkin": "Pumpkin",
-            "moon_flower": "Flower",
-        }
-        # Colored dot
-        pyxel.rect(tx, ty + 1, 3, 3, seed_color)
-        pyxel.text(tx + 5, ty, short_names.get(seed_name, "???"), COL_DARK)
+        for i in range(num_slots):
+            sx = start_x + i * (slot_size + slot_gap)
+            self._toolbar_slots.append((sx, bar_y, slot_size, slot_size))
 
-        # Action hint — right side
-        hint = "Tap to interact"
-        if hovered_tile and tiles:
-            hint = self._get_action_hint(hovered_tile, crop_system, tiles)
-        elif hovered_tile:
-            hint = "Tap"
+            if i < 4:
+                # --- Seed slot ---
+                crop_id = CROP_IDS[i]
+                crop_def = CROPS[crop_id]
+                is_selected = (i == crop_system.selected_seed)
 
-        hint_x = bx + bubble_w - BUBBLE_PAD - len(hint) * CHAR_W - 1
-        pyxel.text(hint_x, ty, hint, COL_DGREEN)
+                # Slot background
+                if is_selected:
+                    # Selected: bright border + cream fill
+                    pyxel.rect(sx, bar_y, slot_size, slot_size, COL_CREAM)
+                    pyxel.rectb(sx, bar_y, slot_size, slot_size, COL_GREEN)
+                    # Double border for selected
+                    pyxel.rectb(sx - 1, bar_y - 1, slot_size + 2, slot_size + 2, COL_LGREEN)
+                else:
+                    # Unselected: darker
+                    pyxel.rect(sx, bar_y, slot_size, slot_size, COL_CREAM)
+                    pyxel.rectb(sx, bar_y, slot_size, slot_size, COL_WOOD)
 
-        # Line 2: Controls
-        ty2 = ty + CHAR_H + 1
-        controls = "[S]eed  [F]ast  [Q]uit"
-        controls_x = bx + (bubble_w - len(controls) * CHAR_W) // 2
-        pyxel.text(controls_x, ty2, controls, COL_WOOD)
+                # Crop color swatch (centered, 6x6)
+                swatch_x = sx + (slot_size - 6) // 2
+                swatch_y = bar_y + 2
+                pyxel.rect(swatch_x, swatch_y, 6, 6, crop_def["color"])
+                # Tiny highlight
+                pyxel.pset(swatch_x + 1, swatch_y + 1, COL_WHITE)
+
+                # Label below swatch
+                label = short_labels[i]
+                label_x = sx + (slot_size - len(label) * CHAR_W) // 2
+                pyxel.text(label_x, bar_y + 9, label, COL_DARK if is_selected else COL_WOOD)
+
+            elif i == 4:
+                # --- Speed button ---
+                pyxel.rect(sx, bar_y, slot_size, slot_size, COL_CREAM)
+                pyxel.rectb(sx, bar_y, slot_size, slot_size, COL_WOOD)
+                # Speed icon (arrow >>)
+                pyxel.text(sx + 2, bar_y + 2, ">>", COL_ORANGE)
+                pyxel.text(sx + 1, bar_y + 9, "SPD", COL_WOOD)
+
+            elif i == 5:
+                # --- Inventory button ---
+                pyxel.rect(sx, bar_y, slot_size, slot_size, COL_CREAM)
+                pyxel.rectb(sx, bar_y, slot_size, slot_size, COL_WOOD)
+                # Bag icon (simple rectangle)
+                pyxel.rect(sx + 4, bar_y + 3, 6, 5, COL_TAN)
+                pyxel.rect(sx + 5, bar_y + 1, 4, 3, COL_WOOD)
+                pyxel.pset(sx + 6, bar_y + 2, COL_CREAM)
+                pyxel.text(sx + 1, bar_y + 9, "INV", COL_WOOD)
+
+    def check_toolbar_click(self, crop_system, clock):
+        """Check if the mouse clicked a toolbar slot. Returns action string or None.
+        Call this from main.py in the update loop.
+        """
+        if not pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
+            return None
+        if not hasattr(self, '_toolbar_slots'):
+            return None
+
+        mx, my = pyxel.mouse_x, pyxel.mouse_y
+        for i, (sx, sy, sw, sh) in enumerate(self._toolbar_slots):
+            if sx <= mx < sx + sw and sy <= my < sy + sh:
+                if i < 4:
+                    # Seed slot clicked
+                    crop_system.selected_seed = i
+                    return "select_seed"
+                elif i == 4:
+                    clock.cycle_speed()
+                    return "speed"
+                elif i == 5:
+                    self.toggle_inventory()
+                    return "inventory"
+        return None
 
     def _get_action_hint(self, hovered_tile, crop_system, tiles):
         """Get contextual hint text for the hovered tile."""
@@ -208,11 +265,18 @@ class UI:
         if is_pond_tile(tx, ty):
             return "~ Pond ~"
         if is_pen_tile(tx, ty):
-            return "Chicken Pen"
+            return "Chickens"
 
         tile_type = tiles[ty][tx]
-        crop = crop_system.get_crop_at(tx, ty)
 
+        # Check for trees (import here to avoid circular)
+        try:
+            from trees import TreeSystem
+            # We check tree_system via a stored ref if available
+        except ImportError:
+            pass
+
+        crop = crop_system.get_crop_at(tx, ty)
         if crop and crop.is_mature:
             return "Harvest!"
         if crop:
@@ -243,8 +307,162 @@ class UI:
         tx, ty = hovered_tile
         sx = ISLAND_X + tx * TILE_PX
         sy = ISLAND_Y + ty * TILE_PX
-        # Blinking cursor
         if (pyxel.frame_count // 15) % 2 == 0:
             pyxel.rectb(sx, sy, TILE_PX, TILE_PX, COL_WHITE)
         else:
             pyxel.rectb(sx, sy, TILE_PX, TILE_PX, COL_GOLD)
+
+    def draw_goal(self, goal_system):
+        """Draw the current goal as a small bubble on the right side."""
+        goal = goal_system.current_goal
+
+        # Show completion celebration
+        if goal_system.completion_timer > 0 and goal_system.just_completed:
+            cg = goal_system.just_completed
+            msg = f"Done! +{cg.reward_coins}c"
+            msg_w = len(msg) * CHAR_W + BUBBLE_PAD * 2 + 2
+            bx = SCREEN_W - msg_w - 4
+            by = ISLAND_Y + 4
+            draw_bubble(bx, by, msg_w, 12)
+            pyxel.text(bx + BUBBLE_PAD + 1, by + BUBBLE_PAD, msg, COL_GOLD)
+            return
+
+        if goal is None:
+            return
+
+        # Goal bubble — right side, vertically centered
+        desc = goal.description
+        prog = goal.progress_text
+        line = f"{desc} {prog}"
+        bubble_w = len(line) * CHAR_W + BUBBLE_PAD * 2 + 2
+        bx = SCREEN_W - bubble_w - 4
+        by = ISLAND_Y + 4
+
+        draw_bubble(bx, by, bubble_w, 12)
+
+        # Star icon
+        pyxel.pset(bx + BUBBLE_PAD, by + BUBBLE_PAD + 2, COL_GOLD)
+
+        # Text
+        pyxel.text(bx + BUBBLE_PAD + 4, by + BUBBLE_PAD, desc, COL_DARK)
+
+        # Progress — right-aligned in the bubble
+        prog_x = bx + bubble_w - BUBBLE_PAD - len(prog) * CHAR_W - 1
+        pyxel.text(prog_x, by + BUBBLE_PAD, prog, COL_GREEN)
+
+    def draw_inventory(self, game_state, crop_system, animal_system):
+        """Draw a retro inventory panel when open.
+
+        Styled like a classic RPG menu — bordered panel with item rows.
+        Shows: coins, wood, honey, seed selection, crop counts, eggs.
+        """
+        if not self.inventory_open:
+            return
+
+        # Dim the background
+        pyxel.dither(0.4)
+        pyxel.rect(0, 0, SCREEN_W, SCREEN_H, COL_DARK)
+        pyxel.dither(1.0)
+
+        # Panel dimensions — centered on screen
+        pw = 160
+        ph = 140
+        px = (SCREEN_W - pw) // 2
+        py = (SCREEN_H - ph) // 2
+
+        # Draw panel with double border (retro RPG style)
+        draw_bubble(px, py, pw, ph)
+
+        # Inner border for extra retro feel
+        pyxel.rectb(px + 3, py + 3, pw - 6, ph - 6, COL_WOOD)
+
+        # Title
+        title = "INVENTORY"
+        title_x = px + (pw - len(title) * CHAR_W) // 2
+        text_with_shadow(title_x, py + 6, title, COL_DARK, COL_CREAM)
+
+        # Divider line under title
+        pyxel.line(px + 8, py + 14, px + pw - 9, py + 14, COL_WOOD)
+
+        # === Item rows ===
+        row_x = px + 10
+        row_y = py + 20
+        row_h = 12  # height per row
+
+        # --- Coins ---
+        pyxel.rect(row_x, row_y + 2, 3, 3, COL_GOLD)
+        pyxel.pset(row_x + 1, row_y + 3, COL_ORANGE)
+        pyxel.text(row_x + 6, row_y + 1, "Coins", COL_DARK)
+        val = str(game_state["coins"])
+        pyxel.text(px + pw - 12 - len(val) * CHAR_W, row_y + 1, val, COL_GOLD)
+
+        row_y += row_h
+
+        # --- Wood ---
+        pyxel.rect(row_x, row_y + 2, 3, 3, COL_WOOD)
+        pyxel.pset(row_x + 1, row_y + 3, COL_TAN)
+        pyxel.text(row_x + 6, row_y + 1, "Wood", COL_DARK)
+        val = str(game_state["wood"])
+        pyxel.text(px + pw - 12 - len(val) * CHAR_W, row_y + 1, val, COL_TAN)
+
+        row_y += row_h
+
+        # --- Honey ---
+        from constants import COL_GOLD as _
+        pyxel.rect(row_x, row_y + 2, 3, 3, COL_ORANGE)
+        pyxel.pset(row_x + 1, row_y + 3, COL_GOLD)
+        pyxel.text(row_x + 6, row_y + 1, "Honey", COL_DARK)
+        honey_val = f"{animal_system.honey:.0f}"
+        pyxel.text(px + pw - 12 - len(honey_val) * CHAR_W, row_y + 1, honey_val, COL_ORANGE)
+
+        row_y += row_h
+
+        # --- Eggs ---
+        pyxel.rect(row_x, row_y + 2, 3, 3, COL_CREAM)
+        pyxel.pset(row_x + 1, row_y + 3, COL_WHITE)
+        pyxel.text(row_x + 6, row_y + 1, "Eggs", COL_DARK)
+        egg_val = str(len(animal_system.eggs))
+        pyxel.text(px + pw - 12 - len(egg_val) * CHAR_W, row_y + 1, egg_val, COL_CREAM)
+
+        row_y += row_h
+
+        # Divider
+        pyxel.line(px + 8, row_y - 2, px + pw - 9, row_y - 2, COL_WOOD)
+
+        # --- Seeds section ---
+        pyxel.text(row_x, row_y + 1, "SEEDS", COL_DARK)
+        row_y += row_h
+
+        seed_names = {
+            "sky_wheat": "Sky Wheat",
+            "star_berry": "Star Berry",
+            "cloud_pumpkin": "Cloud Pumpkin",
+            "moon_flower": "Moon Flower",
+        }
+
+        for i, crop_id in enumerate(CROP_IDS):
+            crop_def = CROPS[crop_id]
+            is_selected = (i == crop_system.selected_seed)
+
+            # Selection arrow
+            if is_selected:
+                pyxel.text(row_x, row_y + 1, ">", COL_GREEN)
+
+            # Crop color dot
+            pyxel.rect(row_x + 8, row_y + 2, 3, 3, crop_def["color"])
+
+            # Name
+            name = seed_names.get(crop_id, crop_id)
+            name_col = COL_GREEN if is_selected else COL_DARK
+            pyxel.text(row_x + 14, row_y + 1, name, name_col)
+
+            # Price/value
+            val_text = f"{crop_def['sell']}c"
+            pyxel.text(px + pw - 12 - len(val_text) * CHAR_W, row_y + 1, val_text, COL_GOLD)
+
+            row_y += 8
+
+        # Footer
+        footer = "[E] Close  [TAB] Seed"
+        footer_x = px + (pw - len(footer) * CHAR_W) // 2
+        pyxel.text(footer_x, py + ph - 10, footer, COL_WOOD)

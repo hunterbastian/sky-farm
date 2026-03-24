@@ -4,7 +4,7 @@
 # === Screen ===
 SCREEN_W = 256
 SCREEN_H = 240
-FPS = 30
+FPS = 60
 
 # === Grid ===
 TILE_PX = 8        # Each tile is 8x8 pixels (Pyxel's native tile size)
