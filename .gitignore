@@ -1,7 +1,9 @@
-node_modules/
+__pycache__/
+*.pyc
+.env
+.venv/
+*.egg-info/
 dist/
-*.log
+build/
+.claude/
 .DS_Store
-
-.vercel
-output/

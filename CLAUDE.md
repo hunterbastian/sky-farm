@@ -1,77 +1,73 @@
-# CLAUDE.md — Sky Farm
+# CLAUDE.md — Soratchi (Sky Farm)
 
 ## Overview
-Top-down 2D pixel farming game built with PixiJS v8 + TypeScript + Vite. Stardew Valley-inspired aesthetic on a floating grass island above a dark blue void. Retro CRT visual style with Press Start 2P pixel font.
+Top-down 2D pixel farming idle game built with **Pyxel** (Python fantasy console). Stardew Valley / Animal Crossing-inspired aesthetic on a floating grass island. 16-color palette, chiptune audio, fantasy console constraints.
+
+Rewritten from PixiJS v8 + TypeScript (archived on `pixijs-archive` branch).
 
 ## Build & Run
-- `npm run dev` — start Vite dev server
-- `npx tsc --noEmit` — type-check without emitting
-- `npm run build` — production build (`tsc && vite build`)
+- `pyxel run main.py` — run the game
+- `pyxel edit soratchi.pyxres` — open sprite/sound editor
+- `pyxel app2html main.py` — build to single HTML file for web deploy
 
 ## Deployment
 - Vercel: https://sky-farm.vercel.app
 - GitHub: https://github.com/hunterbastian/sky-farm
-- Vercel project name is `sky-islands` (aliased to `sky-farm.vercel.app`)
-- Deploy: `vercel --prod && vercel alias set $(vercel ls sky-islands 2>&1 | grep Production | head -1 | awk '{print $3}') sky-farm.vercel.app`
-- Or simpler: `vercel --prod` then `vercel alias set <deployment-url> sky-farm.vercel.app`
-- **`vercel --prod` alone only updates `sky-islands.vercel.app` — must re-alias to `sky-farm.vercel.app`**
-- **Always push to git AND deploy after every change**
+- Deploy: `pyxel app2html main.py` → rename to `index.html` → `vercel --prod`
 
 ## Architecture
-Single-file game at `src/main.ts` (~2200 lines). All rendering, game logic, and UI in one module.
+Modular Python — each system in its own file. Entry point is `main.py`.
+
+### File Map
+- `main.py` — App class, game loop, state machine (boot → title → playing)
+- `constants.py` — palette, grid, timing, crop defs, all magic numbers
+- `world.py` — tile grid, island shape, pond/pen bounds
+- `clock.py` — day/night cycle, speed multiplier, mood keyframes
+- `crops.py` — crop growth, auto-water/harvest/replant
+- `trees.py` — oak/maple state, chopping, regrow
+- `animals.py` — chickens, bees, eggs, honey
+- `particles.py` — all particle systems
+- `ui.py` — HUD, toolbar, floating text, panels
+- `input_handler.py` — mouse→tile, smart tap dispatch
+- `save_load.py` — JSON persistence
+- `draw_world.py` — terrain, pond, pen, cliff edges
+- `draw_entities.py` — trees, crops, chickens, bees
+- `draw_sky.py` — sky gradient, clouds, stars, night overlay
+- `sound.py` — sound slot defs, music playback
+- `soratchi.pyxres` — sprites, tilemaps, sounds (Pyxel editor)
 
 ### Rendering
-- PixiJS v8 with WebGL backend, `roundPixels: true` for crisp pixels
-- 3 layered containers: `groundLayer` → `objectLayer` → `uiWorldLayer`
-- Per-frame `Graphics.clear()` + redraw (no sprite sheets — all procedural pixel art)
-- Camera centered on island via `world` container transform (`RENDER_SCALE` 3x)
-- `image-rendering: pixelated` on canvas for sharp upscaling
-- Day/night overlay rendered on `app.stage` (screen space, not world space)
-- CRT scanlines + dither + vignette via CSS overlay (`#crt-overlay`)
-- Slight barrel curvature via CSS perspective transform on canvas
+- 256x240 screen, 8x8 tiles, 24x24 island grid (192x192 world)
+- Island centered at offset (32, 8)
+- 16-color mutable palette (set in main.py at boot)
+- Sprites from soratchi.pyxres (3 image banks, 8 tilemaps)
+- Draw order: sky → ground tiles → overlays → z-sorted entities → particles → UI → night overlay
+- Night overlay: `pyxel.dither(alpha)` + full-screen rect
+- No HTML overlay — all UI is pixel-rendered
 
 ### Game Systems
-- 24x24 tile grid (`ISLAND_SIZE`), 16px per tile (`TILE_PX`)
-- Tile types: grass, farmland
-- 4 crops: sky_wheat (3-day, 8 coins), star_berry (4-day, 15), cloud_pumpkin (5-day, 22), moon_flower (6-day, 30)
-- Each crop has unique pixel art across growth stages
-- Click seeds slot again to cycle seed type; `selectedSeed` indexes `CROP_IDS` array
-- 4 tools: hoe, water, seeds, axe — clickable toolbar + number keys + scroll
-- 3 oak trees (choppable with axe, regrow after 60s, give 3 wood)
-- Beehive on middle tree (HIVE_TREE=1) with 5 orbiting bees, sways with tree canopy
-- 2 Japanese maple trees with red/orange canopies, falling leaves that land and fade
-- 4 yellow chickens in fenced pen (tiles 8-13, 2-6) with idle animations (peck, ruffle, look, sit)
-- Chicken pen with fence posts, gate, feeding trough, hay bale, straw ground
-- Chickens lay eggs periodically — click to collect for 3 coins
-- Pond (bottom-left, ~11 tiles) with animated water, ripples, lily pads
-- Cloud shadows drifting across island
-- 30 wildflowers scattered on grass (seeded random, avoid pond/trees/pen)
-- Ambient particles: butterflies (4), motes (20), leaf particles from trees
-- Day/night cycle: 210 real seconds = 1 game day, spawn at 9 AM
-- 17 lighting mood keyframes, max alpha 0.32 (softened)
-- Save/load via localStorage (`sky_farm_save_v2`)
-- Reset Farm button (bottom-right) clears all progress
+- 24x24 tile grid, tile types: grass, farmland (dry/wet)
+- 4 crops: sky_wheat, star_berry, cloud_pumpkin, moon_flower
+- Auto-farm idle loop: auto-water → grow → auto-harvest → auto-replant
+- 3 oak trees (choppable), 2 maple trees (decorative)
+- 4 chickens in fenced pen, egg laying/collecting
+- Beehive with 3 bee species
+- Pond with animated water, lily pads, ripples
+- Day/night cycle: 210s = 1 day, dithered overlays
+- Particles: dirt, splash, sparkle, wood chips, leaves, motes, butterflies
+- Save/load via JSON file
 
-### UI
-- HTML overlay for HUD (not canvas-rendered)
-- Press Start 2P pixel font (Google Fonts) for all text
-- DOM built with `createElement` + `textContent` (no innerHTML)
-- Day clock: emoji phase icon + progress bar + label
-- Boot screen: green terminal text typing animation before title
-- Pond tiles and pen tiles block farming interactions
-- `isPondTile()` and `isPenTile()` guard tile interactions
+### Palette (16 colors)
+0=dark 1=bark 2=wood 3=tan 4=wet 5=dgreen 6=green 7=lgreen
+8=dwater 9=sky 10=gold 11=orange 12=red 13=pink 14=cream 15=white
 
 ## Controls
-- Left click — use tool (hoe, water, seeds, axe) / collect eggs
-- 1-4 / scroll — switch tools
-- Click toolbar slots to select tools
-- Click seeds slot again to cycle crop type
+- Left click — use tool / interact
+- 1-5 — switch tools (hoe, water, seeds, axe, pointer)
+- Q — quit
 
 ## Key Patterns
-- Seeded random (`seededRandom(seed)`) for deterministic tile variation, wildflower placement
-- All entities (chickens, bees, butterflies) use idle sub-animation state machines
-- Wildflowers initialized lazily (`initWildflowers()` in first `renderWorld()` call) to avoid referencing trees/mapleTrees before declaration
-- Night overlay on `app.stage` (not `world`) to cover full screen regardless of camera
-- Beehive position tracks tree canopy sway via matching `Math.sin()` formula
-- Colors defined in `COLORS` object — Stardew-inspired palette
-- `output/` dir is gitignored (old test artifacts)
+- All state in `update()`, all rendering in `draw()` — never mutate state in draw
+- `pyxel.blt()` for sprites, `pyxel.bltm()` for tilemap rendering
+- Multi-tile trees: composite blt() calls, not tilemap entries
+- `constants.py` is the single source for all magic numbers
